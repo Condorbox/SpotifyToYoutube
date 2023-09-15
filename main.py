@@ -1,13 +1,15 @@
+import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import pytube
-import os
+from pytube.exceptions import AgeRestrictedError
+from pydub import AudioSegment
 
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
 redirect_uri = os.environ.get("REDIRECT_URI")
 
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
+'''sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
 
 playlist_id = os.environ.get("PLALIST_ID")
 playlist = sp.playlist_tracks(playlist_id)
@@ -17,17 +19,26 @@ for track in playlist["items"]:
     artists = ", ".join([artist["name"] for artist in track["track"]["artists"]])
     print(f"Track: {track_name}, Artist: {artists}")
 
-first_track = playlist["items"][0]["track"]
-first_track_name = first_track["name"]
-first_track_artist = ", ".join([artist['name'] for artist in first_track['artists']])
-s = pytube.Search(f"{first_track_name}, {first_track_artist}")
+    search = pytube.Search(f"{track_name}, {artists}")
+    video_url = f"https://www.youtube.com/watch?v={search.results[0].video_id}"
+    yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, )
+    try :
+        audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
+        output_path = "./songs"
+        audio_stream.download(output_path=output_path)
+        print(f"Dowload {track_name}: {output_path}")
+    except AgeRestrictedError as e:
+        print(f"{track_name} ERROR: age restricted -> {e}")
 
-yt = s.results[0]
-print("___________________________________________")
-print(f"song: {yt.title} , channel: {yt.author}")
+print("End of the program")'''
 
-audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
+SONGS_DIR = ".\songs"
+OUTPUT_DIR = ".\opus_songs"
 
-output_path = "./songs"
-audio_stream.download(output_path=output_path)
-print(f"Descarga completa: {output_path}")
+for file in os.listdir(SONGS_DIR):
+    if(not file.endswith(".mp4")):
+        continue
+    input_file = os.path.join(SONGS_DIR, file)
+    output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + '.opus')
+    audio = AudioSegment.from_file(input_file, format="mp4")
+    audio.export(output_file, format="opus")
