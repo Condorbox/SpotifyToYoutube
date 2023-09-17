@@ -72,6 +72,7 @@ while playlist['next']:
         video_id = search.results[0].video_id
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         add_song_to_playlist(video_id)
+        # Dowload video
         yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, on_progress_callback=on_progress)
         retry_count = max_retries
         while retry_count > 0:
@@ -95,7 +96,7 @@ SONGS_DIR = ".\songs"
 OUTPUT_DIR = ".\ogg_songs"
 
 print("Converting...")
-# Convert form mp4 to ogg
+# Convert from mp4 to ogg
 for file in os.listdir(SONGS_DIR):
     if(not file.endswith(".mp4")):
         continue
