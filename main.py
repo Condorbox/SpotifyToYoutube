@@ -1,3 +1,4 @@
+import http
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -5,6 +6,7 @@ import pytube
 from pytube.cli import on_progress
 from pytube.exceptions import AgeRestrictedError
 from pydub import AudioSegment
+import time
 
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
@@ -23,13 +25,21 @@ while playlist['next']:
         search = pytube.Search(f"{artists} - {track_name}")
         video_url = f"https://www.youtube.com/watch?v={search.results[0].video_id}"
         yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, on_progress_callback=on_progress)
-        try :
-            audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
-            output_path = "./songs"
-            audio_stream.download(output_path=output_path)
-            print(f"Dowload {track_name} to {output_path}")
-        except AgeRestrictedError as e:
-            print(f"{track_name} ERROR: age restricted -> {e}")
+        retry_count = 100
+        while retry_count > 0:
+            try :
+                audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
+                output_path = "./songs"
+                audio_stream.download(output_path=output_path)
+                print(f"Dowload {track_name} to {output_path}")
+                break
+            except AgeRestrictedError as e:
+                print(f"Song {track_name} WARNING: {e}")
+                break
+            except (pytube.exceptions.PytubeError, http.client.RemoteDisconnected) as e:
+                print(f"Song {track_name} ERROR: {e}")
+                retry_count -= 1
+                time.sleep(5)
     
     playlist = sp.next(playlist)
 
