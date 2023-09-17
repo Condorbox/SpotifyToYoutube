@@ -185,3 +185,5 @@ cython_debug/
 
 # Not commit songs
 *.mp4
+*.opus
+*.ogg

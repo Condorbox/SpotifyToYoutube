@@ -33,12 +33,16 @@ for track in playlist["items"]:
 print("End of the program")'''
 
 SONGS_DIR = ".\songs"
-OUTPUT_DIR = ".\opus_songs"
+OUTPUT_DIR = ".\ogg_songs"
+
+print("Converting...")
 
 for file in os.listdir(SONGS_DIR):
     if(not file.endswith(".mp4")):
         continue
     input_file = os.path.join(SONGS_DIR, file)
-    output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + '.opus')
+    output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + '.ogg')
     audio = AudioSegment.from_file(input_file, format="mp4")
-    audio.export(output_file, format="opus")
+    audio.export(output_file, format="ogg")
+
+print("The conversion has been successful")
