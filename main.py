@@ -32,25 +32,39 @@ if not credentials or not credentials.valid:
 youtube_api = googleapiclient.discovery.build('youtube', 'v3', credentials=credentials)
 playlist_yt_title = "My Music"
 playlist_yt_description = "Favourite song from Spotify"
-playlist_yt = youtube_api.playlists().insert(
-    part='snippet,status',
-    body={
-        'snippet': {
-            'title': playlist_yt_title,
-            'description': playlist_yt_description
-        },
-        'status': {
-            'privacyStatus': 'private' 
-        }
-    }
+# Search if the playlist exits
+existing_playlists = youtube_api.playlists().list(
+    part='snippet',
+    mine=True 
 ).execute()
+playlist_exists = False
+for playlist in existing_playlists.get('items', []):
+    if playlist['snippet']['title'] == playlist_yt_title:
+        playlist_exists = True
+        playlist_id = playlist['id']
+        break
+# Create playlist if not existed
+if(not playlist_exists):
+    playlist_yt = youtube_api.playlists().insert(
+        part='snippet,status',
+        body={
+            'snippet': {
+                'title': playlist_yt_title,
+                'description': playlist_yt_description
+            },
+            'status': {
+                'privacyStatus': 'private' 
+            }
+        }
+    ).execute()
+    playlist_id = playlist_yt['id']
 
 def add_song_to_playlist(video_id):
     youtube_api.playlistItems().insert(
         part='snippet',
         body={
             'snippet': {
-                'playlistId': playlist_yt['id'],
+                'playlistId': playlist_id,
                 'resourceId': {
                     'kind': 'youtube#video',
                     'videoId': video_id
