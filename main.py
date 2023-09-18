@@ -132,15 +132,16 @@ while playlist["next"]:
     
     playlist = sp.next(playlist)
 
-# Convert from mp4 to ogg
-print("Converting...")
+if  dowload_songs:
+    # Convert from mp4 to ogg
+    print("Converting...")
 
-for file in os.listdir(SONGS_DIR):
-    if not file.endswith(".mp4"):
-        continue
-    input_file = os.path.join(SONGS_DIR, file)
-    output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + ".ogg")
-    audio = AudioSegment.from_file(input_file, format="mp4")
-    audio.export(output_file, format="ogg")
+    for file in os.listdir(SONGS_DIR):
+        if not file.endswith(".mp4"):
+            continue
+        input_file = os.path.join(SONGS_DIR, file)
+        output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + ".ogg")
+        audio = AudioSegment.from_file(input_file, format="mp4")
+        audio.export(output_file, format="ogg")
 
-print("The conversion has been successful")
+    print("The conversion has been successful")
