@@ -10,7 +10,12 @@ from pydub import AudioSegment
 import urllib.error
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
+from colorama import Fore, Style
 
+reset_color = Style.RESET_ALL
+warning_color = Fore.YELLOW
+error_color = Fore.RED
+message_color = Fore.BLUE
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
 redirect_uri = os.environ.get("REDIRECT_URI")
@@ -24,11 +29,11 @@ while True:
     user_input = input("Do you want to download the songs(y/n): ")
     if user_input.upper() == "Y":
         dowload_songs = True
-        print(f"Dowload songs -> {dowload_songs}")
+        print(f"Dowload songs -> {message_color}{dowload_songs}{reset_color}")
         break
     elif user_input.upper() == "N":
         dowload_songs = False
-        print(f"Dowload songs -> {dowload_songs}")
+        print(f"Dowload songs -> {message_color}{dowload_songs}{reset_color}")
         break
     else:
         print("Not valid response, y or n")
@@ -113,13 +118,13 @@ while playlist['next']:
                 audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
                 output_path = "./songs"
                 audio_stream.download(output_path=output_path)
-                print(f"Dowload {track_name} to {output_path}")
+                print(f"Dowload {message_color}{track_name}{reset_color} to {message_color}{output_path}{reset_color}")
                 break
             except AgeRestrictedError as e:
-                print(f"Song {track_name} - WARNING: {e}")
+                print(f"Song {message_color}{track_name}{reset_color} - {warning_color}WARNING: {e}{reset_color}")
                 break
             except (pytube.exceptions.PytubeError, http.client.RemoteDisconnected, urllib.error.URLError) as e:
-                print(f"Song {track_name} - ERROR: {e} , try: {retry_count}")
+                print(f"Song {track_name} - {error_color}ERROR: {e}{reset_color} , try: {message_color}{retry_count}{reset_color}")
                 retry_count -= 1
                 time.sleep(5)
     
