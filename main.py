@@ -12,16 +12,19 @@ import google_auth_oauthlib.flow
 import googleapiclient.discovery
 from colorama import Fore, Style
 
-reset_color = Style.RESET_ALL
-warning_color = Fore.YELLOW
-error_color = Fore.RED
-message_color = Fore.BLUE
+SONGS_DIR = ".\songs"
+OUTPUT_DIR = ".\ogg_songs"
+RESET_COLOR = Style.RESET_ALL
+WARNING_COLOR = Fore.YELLOW
+ERROR_COLOR = Fore.RED
+MESSAGE_COLOR = Fore.BLUE
+MAX_RETRIES = 50
+
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
 redirect_uri = os.environ.get("REDIRECT_URI")
 playlist_id = os.environ.get("PLALIST_ID")
 json_url = os.environ.get("JSON_URL")
-max_retries = 50
 
 # Ask the user if want to download songs
 dowload_songs = False
@@ -29,11 +32,11 @@ while True:
     user_input = input("Do you want to download the songs(y/n): ")
     if user_input.upper() == "Y":
         dowload_songs = True
-        print(f"Dowload songs -> {message_color}{dowload_songs}{reset_color}")
+        print(f"Dowload songs -> {MESSAGE_COLOR}{dowload_songs}{RESET_COLOR}")
         break
     elif user_input.upper() == "N":
         dowload_songs = False
-        print(f"Dowload songs -> {message_color}{dowload_songs}{reset_color}")
+        print(f"Dowload songs -> {MESSAGE_COLOR}{dowload_songs}{RESET_COLOR}")
         break
     else:
         print("Not valid response, y or n")
@@ -55,17 +58,17 @@ playlist_yt_title = "My Music"
 playlist_yt_description = "Favourite song from Spotify"
 # Search if the playlist exits
 existing_playlists = youtube_api.playlists().list(
-    part='snippet',
+    part="snippet",
     mine=True 
 ).execute()
 playlist_exists = False
-for playlist in existing_playlists.get('items', []):
-    if playlist['snippet']['title'] == playlist_yt_title:
+for playlist in existing_playlists.get("items", []):
+    if playlist["snippet"]["title"] == playlist_yt_title:
         playlist_exists = True
-        playlist_id = playlist['id']
+        playlist_id = playlist["id"]
         break
 # Create playlist if not existed
-if(not playlist_exists):
+if not playlist_exists:
     playlist_yt = youtube_api.playlists().insert(
         part='snippet,status',
         body={
@@ -99,7 +102,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirec
 playlist = sp.playlist_tracks(playlist_id, limit=100)
 
 # Read spotify playlist
-while playlist['next']:  
+while playlist["next"]:  
     for track in playlist["items"]:
         track_name = track["track"]["name"]
         artists = ", ".join([artist["name"] for artist in track["track"]["artists"]])
@@ -112,34 +115,31 @@ while playlist['next']:
         if (not dowload_songs):
             continue
         yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, on_progress_callback=on_progress)
-        retry_count = max_retries
+        retry_count = MAX_RETRIES
         while retry_count > 0:  # Retry loop to attempt to resolve connection issues
             try :
                 audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
-                output_path = "./songs"
-                audio_stream.download(output_path=output_path)
-                print(f"Dowload {message_color}{track_name}{reset_color} to {message_color}{output_path}{reset_color}")
+                audio_stream.download(output_path=SONGS_DIR)
+                print(f"Dowload {MESSAGE_COLOR}{track_name}{RESET_COLOR} to {MESSAGE_COLOR}{SONGS_DIR}{RESET_COLOR}")
                 break
             except AgeRestrictedError as e:
-                print(f"Song {message_color}{track_name}{reset_color} - {warning_color}WARNING: {e}{reset_color}")
+                print(f"Song {MESSAGE_COLOR}{track_name}{RESET_COLOR} - {WARNING_COLOR}WARNING: {e}{RESET_COLOR}")
                 break
             except (pytube.exceptions.PytubeError, http.client.RemoteDisconnected, urllib.error.URLError) as e:
-                print(f"Song {track_name} - {error_color}ERROR: {e}{reset_color} , try: {message_color}{retry_count}{reset_color}")
+                print(f"Song {track_name} - {ERROR_COLOR}ERROR: {e}{RESET_COLOR} , try: {MESSAGE_COLOR}{retry_count}{RESET_COLOR}")
                 retry_count -= 1
                 time.sleep(5)
     
     playlist = sp.next(playlist)
 
-SONGS_DIR = ".\songs"
-OUTPUT_DIR = ".\ogg_songs"
-
-print("Converting...")
 # Convert from mp4 to ogg
+print("Converting...")
+
 for file in os.listdir(SONGS_DIR):
-    if(not file.endswith(".mp4")):
+    if not file.endswith(".mp4"):
         continue
     input_file = os.path.join(SONGS_DIR, file)
-    output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + '.ogg')
+    output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + ".ogg")
     audio = AudioSegment.from_file(input_file, format="mp4")
     audio.export(output_file, format="ogg")
 
