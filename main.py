@@ -8,7 +8,6 @@ from pytube.cli import on_progress
 from pytube.exceptions import AgeRestrictedError
 from pydub import AudioSegment
 import urllib.error
-import google.oauth2.credentials
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
 
@@ -19,6 +18,23 @@ playlist_id = os.environ.get("PLALIST_ID")
 json_url = os.environ.get("JSON_URL")
 max_retries = 50
 
+# Ask the user if want to download songs
+dowload_songs = False
+while True: 
+    user_input = input("Do you want to download the songs(y/n): ")
+    if user_input.upper() == "Y":
+        dowload_songs = True
+        print(f"Dowload songs -> {dowload_songs}")
+        break
+    elif user_input.upper() == "N":
+        dowload_songs = False
+        print(f"Dowload songs -> {dowload_songs}")
+        break
+    else:
+        print("Not valid response, y or n")
+
+
+# Connect to the user google count credentials
 flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
     json_url,
     ["https://www.googleapis.com/auth/youtube.force-ssl"]
@@ -73,6 +89,7 @@ def add_song_to_playlist(video_id):
         }
     ).execute()
 
+# Get Spotify Playlist
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
 playlist = sp.playlist_tracks(playlist_id, limit=100)
 
@@ -87,9 +104,11 @@ while playlist['next']:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         add_song_to_playlist(video_id)
         # Dowload video
+        if (not dowload_songs):
+            continue
         yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, on_progress_callback=on_progress)
         retry_count = max_retries
-        while retry_count > 0:
+        while retry_count > 0:  # Retry loop to attempt to resolve connection issues
             try :
                 audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
                 output_path = "./songs"
@@ -97,10 +116,10 @@ while playlist['next']:
                 print(f"Dowload {track_name} to {output_path}")
                 break
             except AgeRestrictedError as e:
-                print(f"Song {track_name} WARNING: {e}")
+                print(f"Song {track_name} - WARNING: {e}")
                 break
             except (pytube.exceptions.PytubeError, http.client.RemoteDisconnected, urllib.error.URLError) as e:
-                print(f"Song {track_name} ERROR: {e}")
+                print(f"Song {track_name} - ERROR: {e} , try: {retry_count}")
                 retry_count -= 1
                 time.sleep(5)
     
