@@ -112,7 +112,7 @@ while playlist["next"]:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         add_song_to_playlist(video_id)
         # Dowload video
-        if (not dowload_songs):
+        if not dowload_songs:
             continue
         yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, on_progress_callback=on_progress)
         retry_count = MAX_RETRIES
