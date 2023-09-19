@@ -42,4 +42,4 @@ The program will search for songs from your Spotify playlist, add them to a YouT
 and download the songs if you selected the option.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](https://mit-license.org/) file for more details.
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/Condorbox/SpotifyToYoutube/blob/main/LICENSE) file for more details.
