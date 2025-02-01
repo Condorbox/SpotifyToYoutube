@@ -1,25 +1,15 @@
-import http
 import os
 import subprocess
 import spotipy
-import time
 from spotipy.oauth2 import SpotifyOAuth
-import pytube
-from pytube.cli import on_progress
-from pytube.exceptions import AgeRestrictedError
-from pydub import AudioSegment
-import urllib.error
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
 from colorama import Fore, Style
 
-SONGS_DIR = ".\songs"
-OUTPUT_DIR = ".\ogg_songs"
 RESET_COLOR = Style.RESET_ALL
 WARNING_COLOR = Fore.YELLOW
 ERROR_COLOR = Fore.RED
 MESSAGE_COLOR = Fore.BLUE
-MAX_RETRIES = 50
 
 client_id = os.environ.get("CLIENT_ID")
 client_secret = os.environ.get("CLIENT_SECRET")
@@ -27,6 +17,7 @@ redirect_uri = os.environ.get("REDIRECT_URI")
 spoti_playlist_id = os.environ.get("PLALIST_ID")
 json_url = os.environ.get("JSON_URL")
 yt_playlits_name = os.environ.get("PLAYLIST_NAME")
+download_dir = os.environ.get("DOWNLOAD_DIR")
 
 # Ask the user if want to download songs
 dowload_songs = False
@@ -100,13 +91,13 @@ def add_song_to_playlist(video_id):
     ).execute()
 
 def search_song(song):
-    comand = [
+    command = [
         "yt-dlp",
         "--print", "%(id)s",
         f"ytsearch1:{song}" 
     ]
     
-    resultado = subprocess.run(comand, capture_output=True, text=True)
+    resultado = subprocess.run(command, capture_output=True, text=True)
 
     if resultado.stderr:
         print(f"Error searching song: {song}\n error: {resultado.stderr}")
@@ -115,6 +106,16 @@ def search_song(song):
     video_id = resultado.stdout.strip()
     
     return video_id
+
+def download_song(video_url):
+    command = [
+        "yt-dlp", 
+        "-f", "bestaudio", 
+        "-o", f"{download_dir}/%(title)s.%(ext)s", 
+        video_url
+    ]
+
+    subprocess.run(command)
 
 
 # Get Spotify Playlist
@@ -130,39 +131,8 @@ while playlist["next"]:
         video_id = search_song(f"{artists} - {track_name}")
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         add_song_to_playlist(video_id)
-        # Dowload video
         if not dowload_songs:
             continue
-        yt = pytube.YouTube(url=video_url, use_oauth=True, allow_oauth_cache=True, on_progress_callback=on_progress)
-        retry_count = MAX_RETRIES
-        while retry_count > 0:  # Retry loop to attempt to resolve connection issues
-            try:
-                audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
-                audio_stream.download(output_path=SONGS_DIR)
-                print(f"Dowload {MESSAGE_COLOR}{track_name}{RESET_COLOR} to {MESSAGE_COLOR}{SONGS_DIR}{RESET_COLOR}")
-                break
-            except AgeRestrictedError as e:
-                print(f"Song {MESSAGE_COLOR}{track_name}{RESET_COLOR} - {WARNING_COLOR}WARNING: {e}{RESET_COLOR}")
-                break
-            except (pytube.exceptions.PytubeError, http.client.RemoteDisconnected, urllib.error.URLError) as e:
-                print(
-                    f"Song {track_name} - {ERROR_COLOR}ERROR: {e}{RESET_COLOR} , try: {MESSAGE_COLOR}{retry_count}{RESET_COLOR}")
-                retry_count -= 1
-                time.sleep(5)
+        download_song(video_url)
 
     playlist = sp.next(playlist)
-
-if dowload_songs:
-    # Convert from mp4 to ogg
-    print("Converting...")
-
-    for file in os.listdir(SONGS_DIR):
-        if not file.endswith(".mp4"):
-            continue
-        input_file = os.path.join(SONGS_DIR, file)
-        output_file = os.path.join(OUTPUT_DIR, os.path.splitext(file)[0] + ".ogg")
-        audio = AudioSegment.from_file(input_file, format="mp4")
-        audio.export(output_file, format="ogg")
-
-    print("The conversion has been successful")
-
