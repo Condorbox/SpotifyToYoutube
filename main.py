@@ -1,5 +1,6 @@
 import http
 import os
+import subprocess
 import spotipy
 import time
 from spotipy.oauth2 import SpotifyOAuth
@@ -25,6 +26,7 @@ client_secret = os.environ.get("CLIENT_SECRET")
 redirect_uri = os.environ.get("REDIRECT_URI")
 spoti_playlist_id = os.environ.get("PLALIST_ID")
 json_url = os.environ.get("JSON_URL")
+yt_playlits_name = os.environ.get("PLAYLIST_NAME")
 
 # Ask the user if want to download songs
 dowload_songs = False
@@ -53,8 +55,8 @@ if not credentials or not credentials.valid:
 
 # Create yt playlist
 youtube_api = googleapiclient.discovery.build('youtube', 'v3', credentials=credentials)
-playlist_yt_title = "My Music"
-playlist_yt_description = "Favourite song from Spotify"
+playlist_yt_title = yt_playlits_name
+playlist_yt_description = "Song from Spotify"
 # Search if the playlist exits
 existing_playlists = youtube_api.playlists().list(
     part="snippet",
@@ -97,6 +99,23 @@ def add_song_to_playlist(video_id):
         }
     ).execute()
 
+def search_song(song):
+    comand = [
+        "yt-dlp",
+        "--print", "%(id)s",
+        f"ytsearch1:{song}" 
+    ]
+    
+    resultado = subprocess.run(comand, capture_output=True, text=True)
+
+    if resultado.stderr:
+        print(f"Error searching song: {song}\n error: {resultado.stderr}")
+        #exit(-1)
+
+    video_id = resultado.stdout.strip()
+    
+    return video_id
+
 
 # Get Spotify Playlist
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
@@ -108,8 +127,7 @@ while playlist["next"]:
         track_name = track["track"]["name"]
         artists = ", ".join([artist["name"] for artist in track["track"]["artists"]])
         print(f"Track: {track_name}, Artist: {artists}")
-        search = pytube.Search(f"{artists} - {track_name}")
-        video_id = search.results[0].video_id
+        video_id = search_song(f"{artists} - {track_name}")
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         add_song_to_playlist(video_id)
         # Dowload video
@@ -147,3 +165,4 @@ if dowload_songs:
         audio.export(output_file, format="ogg")
 
     print("The conversion has been successful")
+
