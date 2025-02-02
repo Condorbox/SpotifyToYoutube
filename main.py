@@ -153,4 +153,4 @@ while playlist_sp["next"]:
             if download_songs:
                 yt_dlp_action(song_query, YTDLPMode.DOWNLOAD, video_id)  
 
-    playlist_sp = sp.next(playlist)
+    playlist_sp = sp.next(playlist_sp)
