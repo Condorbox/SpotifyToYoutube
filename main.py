@@ -18,7 +18,6 @@ client_secret = os.environ.get("CLIENT_SECRET")
 redirect_uri = os.environ.get("REDIRECT_URI")
 spoti_playlist_id = os.environ.get("PLALIST_ID")
 json_url = os.environ.get("JSON_URL")
-yt_playlits_name = os.environ.get("PLAYLIST_NAME")
 download_dir = os.environ.get("DOWNLOAD_DIR")
 
 class YTDLPMode(Enum):
@@ -48,10 +47,15 @@ flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
 
 credentials = flow.run_local_server(port=8080, prompt="consent")
 
+# Get Spotify Playlist
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
+playlist_sp = sp.playlist_tracks(spoti_playlist_id, limit=100)
+playlist_details = sp.playlist(spoti_playlist_id)
+
 # Create yt playlist
 youtube_api = googleapiclient.discovery.build('youtube', 'v3', credentials=credentials)
-playlist_yt_title = yt_playlits_name
-playlist_yt_description = "Song from Spotify"
+playlist_yt_title = playlist_details["name"]
+playlist_yt_description = playlist_details["description"]
 
 # Search if the playlist exits
 existing_playlists = youtube_api.playlists().list(
@@ -127,13 +131,9 @@ def run_yt_dlp(command_args: List[str]) -> Optional[str]:
     return result.stdout.strip()
 
 
-# Get Spotify Playlist
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
-playlist = sp.playlist_tracks(spoti_playlist_id, limit=100)
-
 # Read spotify playlist
-while playlist["next"]:
-    for track in playlist["items"]:
+while playlist_sp["next"]:
+    for track in playlist_sp["items"]:
         track_name = track["track"]["name"]
         artists = ", ".join([artist["name"] for artist in track["track"]["artists"]])
         song_query = f"{artists} - {track_name}"
@@ -147,4 +147,4 @@ while playlist["next"]:
             if dowload_songs:
                 yt_dlp_action(song_query, YTDLPMode.DOWNLOAD, video_id)  
 
-    playlist = sp.next(playlist)
+    playlist_sp = sp.next(playlist)
