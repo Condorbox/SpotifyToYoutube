@@ -27,7 +27,7 @@ class YTDLPMode(Enum):
 
 if not shutil.which("ffmpeg"):
     print(f"{WARNING_COLOR}WARNING: FFmpeg is not installed, and yt-dlp may use it.{RESET_COLOR}")
-    
+
 def get_user_choice(prompt):
     while True:
         user_input = input(prompt).strip().upper()
@@ -126,11 +126,16 @@ def run_yt_dlp(command_args: List[str]) -> Optional[str]:
     command = ["yt-dlp"] + command_args
     result = subprocess.run(command, capture_output=True, text=True)
 
-    if result.stderr:
+    # Check for errors
+    if result.returncode != 0:
         print(f"{ERROR_COLOR}Error executing yt-dlp: {result.stderr}{RESET_COLOR}")
+        return None  # Return None to indicate failure
 
+    # Check for warnings in stderr (yt-dlp may still succeed with warnings)
+    if result.stderr:
+        print(f"{WARNING_COLOR}Warning from yt-dlp: {result.stderr.strip()}{RESET_COLOR}")
+        
     return result.stdout.strip()
-
 
 # Read spotify playlist
 while playlist_sp["next"]:
