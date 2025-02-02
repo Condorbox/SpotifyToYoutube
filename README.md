@@ -33,8 +33,9 @@ Also, make sure to set up your Spotify and YouTube API credentials before runnin
    ```
 2. Install program dependencies by running
     ```plaintext
-    pip install spotipy yt-dlp google-auth-oauthlib google-api-python-client colorama
+    pip install spotipy google-auth-oauthlib google-api-python-client colorama
      ```
+    Note: yt-dlp and FFmpeg must be installed manually from their respective official websites.
 ## Usage
 
 Run the program from the command line. The program will ask if you want to download the songs.
