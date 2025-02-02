@@ -24,20 +24,17 @@ class YTDLPMode(Enum):
     SEARCH = "search"
     DOWNLOAD = "download"
 
-# Ask the user if want to download songs
-dowload_songs = False
-while True:
-    user_input = input("Do you want to download the songs(y/n): ")
-    if user_input.upper() == "Y":
-        dowload_songs = True
-        print(f"Dowload songs -> {MESSAGE_COLOR}{dowload_songs}{RESET_COLOR}")
-        break
-    elif user_input.upper() == "N":
-        dowload_songs = False
-        print(f"Dowload songs -> {MESSAGE_COLOR}{dowload_songs}{RESET_COLOR}")
-        break
-    else:
-        print("Not valid response, y or n")
+def get_user_choice(prompt):
+    while True:
+        user_input = input(prompt).strip().upper()
+        if user_input == "Y":
+            return True
+        elif user_input == "N":
+            return False
+        print(f"{ERROR_COLOR}Invalid response. Please enter 'y' or 'n'.{RESET_COLOR}")
+
+download_songs = get_user_choice("Do you want to download the songs (y/n): ")
+print(f"Download songs: {MESSAGE_COLOR}{download_songs}{RESET_COLOR}")
 
 # Connect to the user google count credentials
 flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
@@ -137,14 +134,14 @@ while playlist_sp["next"]:
         track_name = track["track"]["name"]
         artists = ", ".join([artist["name"] for artist in track["track"]["artists"]])
         song_query = f"{artists} - {track_name}"
-        print(f"Track: {song_query}")
+        print(f"Track: {MESSAGE_COLOR}{song_query}{RESET_COLOR}")
 
         video_id = yt_dlp_action(song_query, YTDLPMode.SEARCH)
 
         if video_id:
             add_song_to_playlist(video_id)
 
-            if dowload_songs:
+            if download_songs:
                 yt_dlp_action(song_query, YTDLPMode.DOWNLOAD, video_id)  
 
     playlist_sp = sp.next(playlist)
