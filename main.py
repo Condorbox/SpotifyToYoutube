@@ -7,6 +7,7 @@ import googleapiclient.discovery
 from colorama import Fore, Style
 from enum import Enum
 from typing import Optional, List
+import shutil
 
 RESET_COLOR = Style.RESET_ALL
 WARNING_COLOR = Fore.YELLOW
@@ -24,6 +25,9 @@ class YTDLPMode(Enum):
     SEARCH = "search"
     DOWNLOAD = "download"
 
+if not shutil.which("ffmpeg"):
+    print(f"{WARNING_COLOR}WARNING: FFmpeg is not installed, and yt-dlp may use it.{RESET_COLOR}")
+    
 def get_user_choice(prompt):
     while True:
         user_input = input(prompt).strip().upper()
@@ -123,7 +127,7 @@ def run_yt_dlp(command_args: List[str]) -> Optional[str]:
     result = subprocess.run(command, capture_output=True, text=True)
 
     if result.stderr:
-        print(f"Error executing yt-dlp: {result.stderr}")
+        print(f"{ERROR_COLOR}Error executing yt-dlp: {result.stderr}{RESET_COLOR}")
 
     return result.stdout.strip()
 
