@@ -8,6 +8,7 @@ from colorama import Fore, Style
 from enum import Enum
 from typing import Optional, List
 import shutil
+import sys
 
 RESET_COLOR = Style.RESET_ALL
 WARNING_COLOR = Fore.YELLOW
@@ -27,6 +28,10 @@ class YTDLPMode(Enum):
 
 if not shutil.which("ffmpeg"):
     print(f"{WARNING_COLOR}WARNING: FFmpeg is not installed, and yt-dlp may use it.{RESET_COLOR}")
+
+if not shutil.which("yt-dlp"):
+    print(f"{ERROR_COLOR}ERROR: yt-dlp is not installed or cannot be found in the system PATH.{RESET_COLOR}")
+    sys.exit("yt-dlp not installed")  
 
 def get_user_choice(prompt):
     while True:
