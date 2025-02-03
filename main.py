@@ -21,6 +21,7 @@ redirect_uri = os.environ.get("REDIRECT_URI")
 spoti_playlist_id = os.environ.get("PLALIST_ID")
 json_url = os.environ.get("JSON_URL")
 download_dir = os.environ.get("DOWNLOAD_DIR")
+playlist_offset = int(os.environ.get("PLAYLIST_OFFSET") or 0)
 
 class YTDLPMode(Enum):
     SEARCH = "search"
@@ -55,7 +56,7 @@ credentials = flow.run_local_server(port=8080, prompt="consent")
 
 # Get Spotify Playlist
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id, client_secret, redirect_uri, scope="playlist-read-private"))
-playlist_sp = sp.playlist_tracks(spoti_playlist_id, limit=100)
+playlist_sp = sp.playlist_tracks(spoti_playlist_id, limit=100, offset=playlist_offset)
 playlist_details = sp.playlist(spoti_playlist_id)
 
 # Create yt playlist
