@@ -6,7 +6,7 @@ import google_auth_oauthlib.flow
 import googleapiclient.discovery
 from colorama import Fore, Style
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Set
 import shutil
 import sys
 
@@ -93,6 +93,23 @@ if not playlist_exists:
     ).execute()
     playlist_id = playlist_yt['id']
 
+def get_yt_playlist() -> Set[str]:
+    video_ids = set()
+
+    request = youtube_api.playlistItems().list(
+        part="snippet",
+        playlistId=playlist_id,
+        maxResults=50  # YouTube API allows up to 50 per request
+    )
+
+    while request:
+        response = request.execute()
+        for item in response.get("items", []):
+            video_ids.add(item["snippet"]["resourceId"]["videoId"]) 
+        
+        request = youtube_api.playlistItems().list_next(request, response)
+    
+    return video_ids
 
 def add_song_to_playlist(video_id: str):
     youtube_api.playlistItems().insert(
@@ -143,6 +160,9 @@ def run_yt_dlp(command_args: List[str]) -> Optional[str]:
         
     return result.stdout.strip()
 
+# Fetch existing video IDs from the YouTube playlist
+track_set = get_yt_playlist()
+
 # Read spotify playlist
 while playlist_sp["next"]:
     for track in playlist_sp["items"]:
@@ -153,10 +173,11 @@ while playlist_sp["next"]:
 
         video_id = yt_dlp_action(song_query, YTDLPMode.SEARCH)
 
-        if video_id:
+        if video_id and video_id not in track_set:
             add_song_to_playlist(video_id)
+            track_set.add(video_id)
 
-            if download_songs:
-                yt_dlp_action(song_query, YTDLPMode.DOWNLOAD, video_id)  
+        if download_songs:
+            yt_dlp_action(song_query, YTDLPMode.DOWNLOAD, video_id)  
 
     playlist_sp = sp.next(playlist_sp)
