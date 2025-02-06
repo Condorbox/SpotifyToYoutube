@@ -29,6 +29,9 @@ if __name__ == '__main__':
     yt_playlist_id = yt_service.get_or_create_playlist_id(title=playlist_name, description=playlist_description)
     track_set = yt_service.get_existing_video_ids(playlist_id=yt_playlist_id)
 
+    search_strategy = YTDLPHelper.create_strategy(YTDLPMode.SEARCH)
+    download_strategy = YTDLPHelper.create_strategy(YTDLPMode.DOWNLOAD)
+
     # Read spotify playlist
     while sp_playlist["next"]:
         for track in sp_playlist["items"]:
@@ -37,13 +40,13 @@ if __name__ == '__main__':
             song_query = f"{artists} - {track_name}"
             print(f"Track: {MESSAGE_COLOR}{song_query}{RESET_COLOR}")
 
-            video_id = YTDLPHelper.yt_dlp_action(song_query, YTDLPMode.SEARCH)
+            video_id = search_strategy.execute(song=song_query)
 
             if video_id and video_id not in track_set:
                 yt_service.add_song_to_playlist(video_id=video_id, playlist_id=yt_playlist_id)
                 track_set.add(video_id)
 
             if download_songs:
-                YTDLPHelper.yt_dlp_action(song_query, YTDLPMode.DOWNLOAD, video_id)
+                download_strategy.execute(song=song_query, video_id=video_id)
 
         sp_playlist = sp_service.next(sp_playlist)

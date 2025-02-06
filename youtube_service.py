@@ -26,7 +26,7 @@ class YouTubeService:
                 return playlist["id"]
             
         # Create playlist
-        response = self.youtube().youtube_api.playlists().insert(
+        response = self.youtube.playlists().insert(
             part='snippet,status',
             body={
                 'snippet': {

@@ -15,4 +15,4 @@ class SpotifyService:
         return self.sp.playlist_tracks(spoti_playlist_id, limit=100, offset=playlist_offset)
     
     def next(self, playlist):
-        return self.sp(playlist)
+        return self.sp.next(playlist)
