@@ -17,10 +17,15 @@ class YTDLPStrategy:
     
 class SearchStrategy(YTDLPStrategy):
     def execute(self, song: str, video_id: Optional[str] = None) -> str:
+        """Search a video on YouTube and return its video ID."""
         return YTDLPHelper._run_yt_dlp(["--print", "%(id)s", f"ytsearch1:{song}"])
 
 class DownloadStrategy(YTDLPStrategy):
     def execute(self, song: str, video_id: Optional[str] = None):
+        """
+        Download the audio for the given song.
+        If `video_id` is not provided or None, first search for the song.
+        """
         if not video_id:
             video_id = YTDLPHelper.create_strategy(YTDLPMode.SEARCH).execute(song)
 

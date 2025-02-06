@@ -6,10 +6,10 @@ from config import json_url
 
 class YouTubeService:
     def __init__(self):
-        self.youtube = self.authenticate()
+        self.youtube = self._authenticate()
 
-    def authenticate(self):
-        # Connect to the user google count credentials
+    def _authenticate(self):
+        """Authenticate and return a YouTube API client."""
         flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
             json_url,
             ["https://www.googleapis.com/auth/youtube.force-ssl"]
@@ -18,8 +18,12 @@ class YouTubeService:
         credentials = flow.run_local_server(port=8080, prompt="consent")
         return googleapiclient.discovery.build('youtube', 'v3', credentials=credentials)
     
-    # TODO What happens when title is None or description ?
-    def get_or_create_playlist_id(self, title: str, description: str = None) -> str:
+    def get_or_create_playlist_id(self, title: str, description: str = "Playlist from Spotify") -> str:
+        """
+        Retrieve an existing playlist ID by title or create a new one if it doesn't exist.
+        
+        If `description` is not provided, defaults to 'Playlist from Spotify'.
+        """
         playlists = self.youtube.playlists().list(part="snippet", mine=True).execute()
         for playlist in playlists.get("items", []):
             if playlist["snippet"]["title"] == title:
@@ -42,6 +46,9 @@ class YouTubeService:
         return response["id"]
     
     def get_existing_video_ids(self, playlist_id: str) -> Set[str]:
+        """
+        Retrieve a set of video IDs currently in the given playlist.
+        """
         video_ids = set()
         request = self.youtube.playlistItems().list(part="snippet", playlistId=playlist_id, maxResults=50) # YouTube API allows up to 50 per request
         while request:
@@ -51,6 +58,9 @@ class YouTubeService:
         return video_ids
     
     def add_song_to_playlist(self, video_id: str, playlist_id: str):
+        """
+        Add a video to a playlist using its video ID.
+        """
         self.youtube.playlistItems().insert(
             part='snippet',
             body={
