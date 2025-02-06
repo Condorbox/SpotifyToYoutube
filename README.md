@@ -30,18 +30,31 @@ Also, make sure to set up your Spotify and YouTube API credentials before runnin
    JSON_URL=<Path to your Google credentials JSON file>
    PLAYLIST_ID=<The ID of the Spotify playlist you want to convert>
    DOWNLOAD_DIR=<Path to the directory where downloaded audio files will be saved>
+   PLAYLIST_OFFSET=<Offset for Spotify playlist pagination (default: 0)>
    ```
 2. Install program dependencies by running
     ```plaintext
     pip install spotipy google-auth-oauthlib google-api-python-client colorama
      ```
-    Note: yt-dlp and FFmpeg must be installed manually from their respective official websites.
+    **Note**: yt-dlp and FFmpeg must be installed manually from their respective official websites.
 ## Usage
 
 Run the program from the command line. The program will ask if you want to download the songs.
 Respond "y" to download them or "n" to skip the download.
-The program will search for songs from your Spotify playlist, add them to a YouTube playlist (created automatically if it doesn't exist),
-and download the songs in the best available audio format if you selected the option.
+
+The program performs the following steps:
+1. Authenticates with the Spotify and YouTube APIs.
+2. Retrieves the playlist name and description from Spotify.
+3. Creates or retrieves a corresponding YouTube playlist.
+4. Searches for each song from the Spotify playlist on YouTube.
+5. Adds the found videos to the YouTube playlist.
+6. Optionally downloads the songs as audio files
+
+## Features
++ **Spotify to YouTube Playlist Conversion**: Converts a Spotify playlist into a YouTube playlist.
++ **YouTube Playlist Management**: Creates a new YouTube playlist if it doesn't exist.
++ **Duplicate Video Prevention**: Ensures that a song is not added to the YouTube playlist more than once.
++ **Song Downloading Option**: Allows downloading the found YouTube songs in the best available audio format using yt-dlp.
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](https://github.com/Condorbox/SpotifyToYoutube/blob/main/LICENSE) file for more details.
