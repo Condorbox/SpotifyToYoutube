@@ -1,9 +1,11 @@
 from enum import Enum
 import os
+import shlex
 import subprocess
 from typing import List, Optional
 
 from config import ERROR_COLOR, RESET_COLOR, WARNING_COLOR, download_dir
+from utils import sanitize_filename
 
 
 class YTDLPMode(Enum):
@@ -32,8 +34,8 @@ class DownloadStrategy(YTDLPStrategy):
                 video_id = YTDLPHelper.create_strategy(YTDLPMode.SEARCH).execute(song)
 
             if video_id:
-                webm_output_path = os.path.join(download_dir, f"{song}.webm")
-                mp3_output_path = os.path.join(download_dir, f"{song}.mp3")
+                webm_output_path = os.path.join(download_dir, sanitize_filename(f"{song}.webm"))
+                mp3_output_path = os.path.join(download_dir, sanitize_filename(f"{song}.mp3"))
                 
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
                 YTDLPHelper._run_yt_dlp(["-f", "bestaudio", "-o", webm_output_path, video_url])
@@ -41,13 +43,14 @@ class DownloadStrategy(YTDLPStrategy):
                 # Convert WebM to MP3
                 convert_command = [
                     "ffmpeg", 
-                    "-i", webm_output_path, 
+                    "-y", # Automatically overwrite existing files
+                    "-i", f"{webm_output_path}", 
                     "-vn",  # Ignore video
                     "-acodec", "libmp3lame",  # Use MP3 codec
                     "-b:a", "128k",  # Bitrate
-                    mp3_output_path
+                    f"{mp3_output_path}"
                 ]
-                subprocess.run(convert_command, check=True)
+                subprocess.run(convert_command, check=True, shell=True)
 
                 if track_metadata:
                     self._add_metadata(mp3_output_path, track_metadata)
