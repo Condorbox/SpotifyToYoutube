@@ -35,9 +35,15 @@ if __name__ == '__main__':
     # Read spotify playlist
     while sp_playlist["next"]:
         for track in sp_playlist["items"]:
-            track_name = track["track"]["name"]
-            artists = ", ".join([artist["name"] for artist in track["track"]["artists"]])
-            song_query = f"{artists} - {track_name}"
+            track_info = track["track"]
+            track_metadata = {
+                "title": track_info["name"],
+                "album": track_info["album"]["name"],
+                "artist": ", ".join([artist["name"] for artist in track_info["artists"]]),
+                "cover_url": track_info["album"]["images"][0]["url"] if track_info["album"]["images"] else None,
+            }
+
+            song_query = f"{track_metadata['artist']} - {track_metadata['title']}"
             print(f"Track: {MESSAGE_COLOR}{song_query}{RESET_COLOR}")
 
             video_id = search_strategy.execute(song=song_query)
@@ -47,6 +53,6 @@ if __name__ == '__main__':
                 track_set.add(video_id)
 
             if download_songs:
-                download_strategy.execute(song=song_query, video_id=video_id)
+                download_strategy.execute(song=song_query, video_id=video_id, track_metadata=track_metadata)
 
         sp_playlist = sp_service.next(sp_playlist)
