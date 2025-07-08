@@ -39,7 +39,7 @@ if __name__ == '__main__':
             track_metadata = {
                 "title": track_info["name"],
                 "album": track_info["album"]["name"],
-                "artist": ", ".join([artist["name"] for artist in track_info["artists"]]),
+                "artist": ";".join([artist["name"] for artist in track_info["artists"]]),
                 "cover_url": track_info["album"]["images"][0]["url"] if track_info["album"]["images"] else None,
             }
 
