@@ -1,6 +1,6 @@
 # Spotify to YouTube Playlist Converter
 
-This is a Python program that allows you to create a YouTube playlist from songs in a Spotify playlist and optionally download the songs in audio format.
+This is a Python program that allows you to create a YouTube playlist from songs in a Spotify playlist and optionally download the songs in mp3 format.
 
 ## Prerequisites
 
@@ -11,7 +11,7 @@ Before running this program, make sure you have the following installed:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp): A Python library for downloading YouTube videos and audio.
 - [Google APIs Client Library](https://developers.google.com/api-client-library/python/start/installation): For interacting with the YouTube API.
 - [colorama](https://pypi.org/project/colorama/): For formatting text in the console.
-- [FFmpeg](https://ffmpeg.org/): Although not mandatory, yt-dlp may not work properly without it.
+- [FFmpeg](https://ffmpeg.org/): Used by yt-dlp to properly download and process audio. The program automatically converts downloaded songs to MP3 format and embeds useful metadata (such as artist, album, and title).
 
 Also, make sure to set up your Spotify and YouTube API credentials before running the program. You can find more information in the configuration section below.
 
@@ -48,13 +48,14 @@ The program performs the following steps:
 3. Creates or retrieves a corresponding YouTube playlist.
 4. Searches for each song from the Spotify playlist on YouTube.
 5. Adds the found videos to the YouTube playlist.
-6. Optionally downloads the songs as audio files
+6. Optionally downloads the songs as audio files.
+7. Change the video format to mp3 and add metadata.
 
 ## Features
 + **Spotify to YouTube Playlist Conversion**: Converts a Spotify playlist into a YouTube playlist.
-+ **YouTube Playlist Management**: Creates a new YouTube playlist if it doesn't exist.
++ **YouTube Playlist Management**: Creates a new YouTube playlist if it doesn't exist or update if it exist.
 + **Duplicate Video Prevention**: Ensures that a song is not added to the YouTube playlist more than once.
-+ **Song Downloading Option**: Allows downloading the found YouTube songs in the best available audio format using yt-dlp.
++ **Song Downloading with Metadata**: Downloads songs in mp3 format and automatically embeds artist, album, and title metadata using yt-dlp and FFmpeg.
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](https://github.com/Condorbox/SpotifyToYoutube/blob/main/LICENSE) file for more details.
