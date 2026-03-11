@@ -1,8 +1,8 @@
 from enum import Enum
 import os
-import shlex
 import subprocess
 from typing import List, Optional
+import urllib.request
 
 from config import ERROR_COLOR, RESET_COLOR, WARNING_COLOR, download_dir
 from utils import sanitize_filename
@@ -19,7 +19,7 @@ class YTDLPStrategy:
         raise NotImplementedError
     
 class SearchStrategy(YTDLPStrategy):
-    def execute(self, song: str, video_id: Optional[str] = None, track_metadata: Optional[dict] = None) -> str:
+    def execute(self, song: str, video_id: Optional[str] = None, track_metadata: Optional[dict] = None) -> str | None:
         """Search a video on YouTube and return its video ID."""
         return YTDLPHelper._run_yt_dlp(["--print", "%(id)s", f"ytsearch1:{song}"])
 
@@ -38,25 +38,28 @@ class DownloadStrategy(YTDLPStrategy):
                 mp3_output_path = os.path.join(download_dir, sanitize_filename(f"{song}.mp3"))
                 
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
-                YTDLPHelper._run_yt_dlp(["-f", "bestaudio", "-o", webm_output_path, video_url])
 
-                # Convert WebM to MP3
-                convert_command = [
-                    "ffmpeg", 
-                    "-y", # Automatically overwrite existing files
-                    "-i", f"{webm_output_path}", 
-                    "-vn",  # Ignore video
-                    "-acodec", "libmp3lame",  # Use MP3 codec
-                    "-b:a", "128k",  # Bitrate
-                    f"{mp3_output_path}"
-                ]
-                subprocess.run(convert_command, check=True, shell=True)
+                try:
+                    YTDLPHelper._run_yt_dlp(["-f", "bestaudio", "-o", webm_output_path, video_url])
 
-                if track_metadata:
-                    self._add_metadata(mp3_output_path, track_metadata)
-        
-                # Remove original WebM file
-                os.remove(webm_output_path)
+                    # Convert WebM to MP3
+                    convert_command = [
+                        "ffmpeg", 
+                        "-y", # Automatically overwrite existing files
+                        "-i", f"{webm_output_path}", 
+                        "-vn",  # Ignore video
+                        "-acodec", "libmp3lame",  # Use MP3 codec
+                        "-b:a", "128k",  # Bitrate
+                        f"{mp3_output_path}"
+                    ]
+                    subprocess.run(convert_command, check=True)
+
+                    if track_metadata:
+                        self._add_metadata(mp3_output_path, track_metadata)
+
+                finally:
+                    # Remove original WebM file
+                    os.remove(webm_output_path)
 
         except Exception as e:
             print(f"Conversion failed for {song}: {e}")
@@ -64,12 +67,22 @@ class DownloadStrategy(YTDLPStrategy):
     def _add_metadata(self, input_file: str, track_metadata: dict):
         """Embed metadata (title, artist, album, and cover) into the file."""
         try:
+            cover_path = input_file.replace('.mp3', '_cover.jpg')
+            urllib.request.urlretrieve(track_metadata['cover_url'], cover_path)
+
             command = [
-                "ffmpeg", 
+                "ffmpeg", "-y",
                 "-i", input_file,
-                "-c", "copy"  # Copy audio without re-encoding
+                "-i", cover_path,     
+                "-y",     
+                "-map", "0:a",             
+                "-map", "1:v",             
+                "-c", "copy",
+                "-id3v2_version", "3",
+                "-metadata:s:v", 'title=Album cover',
+                "-metadata:s:v", 'comment=Cover (front)',
             ]
-            
+
             # Add metadata fields
             metadata_fields = {
                 "title": track_metadata.get('title', ''),

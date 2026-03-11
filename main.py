@@ -32,14 +32,16 @@ if __name__ == '__main__':
     search_strategy = YTDLPHelper.create_strategy(YTDLPMode.SEARCH)
     download_strategy = YTDLPHelper.create_strategy(YTDLPMode.DOWNLOAD)
 
-    # Read spotify playlist
-    while sp_playlist["next"]:
+    # Read Spotify playlist
+    while True:
         for track in sp_playlist["items"]:
             track_info = track["track"]
+            if not track_info:
+                continue
             track_metadata = {
                 "title": track_info["name"],
                 "album": track_info["album"]["name"],
-                "artist": ";".join([artist["name"] for artist in track_info["artists"]]),
+                "artist": "/".join([artist["name"] for artist in track_info["artists"]]),
                 "cover_url": track_info["album"]["images"][0]["url"] if track_info["album"]["images"] else None,
             }
 
@@ -55,4 +57,6 @@ if __name__ == '__main__':
             if download_songs:
                 download_strategy.execute(song=song_query, video_id=video_id, track_metadata=track_metadata)
 
+        if not sp_playlist["next"]:
+            break
         sp_playlist = sp_service.next(sp_playlist)
