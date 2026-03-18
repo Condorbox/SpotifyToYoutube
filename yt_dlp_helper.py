@@ -4,7 +4,7 @@ import subprocess
 from typing import List, Optional
 import urllib.request
 
-from config import ERROR_COLOR, RESET_COLOR, WARNING_COLOR, download_dir
+from config import ERROR_COLOR, RESET_COLOR, WARNING_COLOR
 from utils import sanitize_filename
 
 
@@ -24,7 +24,10 @@ class SearchStrategy(YTDLPStrategy):
         return YTDLPHelper._run_yt_dlp(["--print", "%(id)s", f"ytsearch1:{song}"])
 
 class DownloadStrategy(YTDLPStrategy):
-    def execute(self, song: str, video_id: Optional[str] = None, track_metadata: Optional[dict] = None):
+    def __init__(self, download_dir: str):
+        self._download_dir = download_dir
+
+    def execute(self, song: str, video_id: Optional[str] = None, track_metadata: Optional[dict] = None) -> str | None:
         """
         Download the audio for the given song.
         If `video_id` is not provided or None, first search for the song.
@@ -33,36 +36,46 @@ class DownloadStrategy(YTDLPStrategy):
             if not video_id:
                 video_id = YTDLPHelper.create_strategy(YTDLPMode.SEARCH).execute(song)
 
-            if video_id:
-                webm_output_path = os.path.join(download_dir, sanitize_filename(f"{song}.webm"))
-                mp3_output_path = os.path.join(download_dir, sanitize_filename(f"{song}.mp3"))
-                
-                video_url = f"https://www.youtube.com/watch?v={video_id}"
+            if not video_id:
+                return None
 
-                try:
-                    YTDLPHelper._run_yt_dlp(["-f", "bestaudio", "-o", webm_output_path, video_url])
+            webm_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.webm"))
+            mp3_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.mp3"))
 
-                    # Convert WebM to MP3
-                    convert_command = [
-                        "ffmpeg", 
-                        "-y", # Automatically overwrite existing files
-                        "-i", f"{webm_output_path}", 
-                        "-vn",  # Ignore video
-                        "-acodec", "libmp3lame",  # Use MP3 codec
-                        "-b:a", "128k",  # Bitrate
-                        f"{mp3_output_path}"
-                    ]
-                    subprocess.run(convert_command, check=True)
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-                    if track_metadata:
-                        self._add_metadata(mp3_output_path, track_metadata)
+            try:
+                if YTDLPHelper._run_yt_dlp(["-f", "bestaudio", "-o", webm_output_path, video_url]) is None:
+                    return None
 
-                finally:
-                    # Remove original WebM file
+                if not os.path.exists(webm_output_path):
+                    return None
+
+                # Convert WebM to MP3
+                convert_command = [
+                    "ffmpeg",
+                    "-y",  # Automatically overwrite existing files
+                    "-i", f"{webm_output_path}",
+                    "-vn",  # Ignore video
+                    "-acodec", "libmp3lame",  # Use MP3 codec
+                    "-b:a", "128k",  # Bitrate
+                    f"{mp3_output_path}",
+                ]
+                subprocess.run(convert_command, check=True)
+
+                if track_metadata:
+                    self._add_metadata(mp3_output_path, track_metadata)
+
+                return mp3_output_path
+
+            finally:
+                # Remove original WebM file
+                if os.path.exists(webm_output_path):
                     os.remove(webm_output_path)
 
         except Exception as e:
             print(f"Conversion failed for {song}: {e}")
+            return None
 
     def _add_metadata(self, input_file: str, track_metadata: dict):
         """Embed metadata (title, artist, album, and cover) into the file."""
@@ -111,17 +124,17 @@ class DownloadStrategy(YTDLPStrategy):
     
 class YTDLPHelper:
     @staticmethod
-    def create_strategy(mode: YTDLPMode) -> YTDLPStrategy:
+    def create_strategy(mode: YTDLPMode, *, download_dir: str | None = None) -> YTDLPStrategy:
         """Factory method to return the appropriate strategy."""
-        strategies = {
-            YTDLPMode.SEARCH: SearchStrategy,
-            YTDLPMode.DOWNLOAD: DownloadStrategy,
-        }
+        if mode == YTDLPMode.SEARCH:
+            return SearchStrategy()
+        if mode == YTDLPMode.DOWNLOAD:
+            if not download_dir:
+                raise ValueError("download_dir is required for download mode")
+            return DownloadStrategy(download_dir)
 
-        if mode not in strategies:
+        else:
             raise ValueError(f"{ERROR_COLOR}Invalid mode: {mode}{RESET_COLOR}")
-
-        return strategies[mode]()  # Instantiate the strategy
 
     @staticmethod
     def _run_yt_dlp(command_args: List[str]) -> Optional[str]:

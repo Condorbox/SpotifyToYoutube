@@ -2,16 +2,19 @@
 from typing import Set
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
-from config import json_url
+from config import Settings
 
 class YouTubeService:
-    def __init__(self):
-        self.youtube = self._authenticate()
+    def __init__(self, settings: Settings, youtube_client=None):
+        self.youtube = youtube_client or self._authenticate(settings)
 
-    def _authenticate(self):
+    def _authenticate(self, settings: Settings):
         """Authenticate and return a YouTube API client."""
+        if not settings.json_url:
+            raise ValueError("Missing path to Google credentials JSON file")
+
         flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-            json_url,
+            settings.json_url,
             ["https://www.googleapis.com/auth/youtube.force-ssl"]
         )   
 
@@ -73,5 +76,4 @@ class YouTubeService:
                 }
             }
         ).execute()
-
 
