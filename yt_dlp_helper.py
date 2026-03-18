@@ -79,35 +79,46 @@ class DownloadStrategy(YTDLPStrategy):
 
     def _add_metadata(self, input_file: str, track_metadata: dict):
         """Embed metadata (title, artist, album, and cover) into the file."""
+        cover_path = input_file.replace(".mp3", "_cover.jpg")
+        temp_output_file = input_file.replace(".mp3", "_tmp.mp3")
         try:
-            cover_path = input_file.replace('.mp3', '_cover.jpg')
-            urllib.request.urlretrieve(track_metadata['cover_url'], cover_path)
+            cover_url = track_metadata.get("cover_url")
 
-            command = [
-                "ffmpeg", "-y",
-                "-i", input_file,
-                "-i", cover_path,     
-                "-y",     
-                "-map", "0:a",             
-                "-map", "1:v",             
-                "-c", "copy",
-                "-id3v2_version", "3",
-                "-metadata:s:v", 'title=Album cover',
-                "-metadata:s:v", 'comment=Cover (front)',
-            ]
+            command = ["ffmpeg", "-y", "-i", input_file]
+
+            if cover_url:
+                urllib.request.urlretrieve(cover_url, cover_path)
+                command.extend(
+                    [
+                        "-i",
+                        cover_path,
+                        "-map",
+                        "0:a",
+                        "-map",
+                        "1:v",
+                        "-c",
+                        "copy",
+                        "-id3v2_version",
+                        "3",
+                        "-metadata:s:v",
+                        "title=Album cover",
+                        "-metadata:s:v",
+                        "comment=Cover (front)",
+                    ]
+                )
+            else:
+                command.extend(["-map", "0:a", "-c", "copy", "-id3v2_version", "3"])
 
             # Add metadata fields
             metadata_fields = {
-                "title": track_metadata.get('title', ''),
-                "artist": track_metadata.get('artist', ''),
-                "album": track_metadata.get('album', '')
+                "title": track_metadata.get("title", ""),
+                "artist": track_metadata.get("artist", ""),
+                "album": track_metadata.get("album", ""),
             }
             
             for key, value in metadata_fields.items():
                 command.extend(["-metadata", f"{key}={value}"])
             
-            # Generate temporary output file
-            temp_output_file = input_file.replace('.mp3', f'_tmp.mp3')
             command.append(temp_output_file)
             
             subprocess.run(command, check=True)
@@ -117,10 +128,11 @@ class DownloadStrategy(YTDLPStrategy):
             print(f"{ERROR_COLOR}Error adding metadata to {input_file}: {e}{RESET_COLOR}")
         except Exception as e:
             print(f"{ERROR_COLOR}Unexpected error: {e}{RESET_COLOR}")
-            # Cleanup temp file if it exists
-            temp_output_file = input_file.replace('.mp3', f'_tmp.mp3')
+        finally:
             if os.path.exists(temp_output_file):
                 os.remove(temp_output_file)
+            if os.path.exists(cover_path):
+                os.remove(cover_path)
     
 class YTDLPHelper:
     @staticmethod
