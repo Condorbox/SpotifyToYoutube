@@ -1,0 +1,6 @@
+spotipy
+google-auth-oauthlib
+google-api-python-client
+colorama
+python-dotenv
+tqdm
