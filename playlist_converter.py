@@ -72,6 +72,9 @@ def convert_playlist(
     download_songs: bool,
     progress: Progress | None = None,
 ) -> ConvertResult:
+    if download_songs and (not download_strategy or not tracker):
+        raise ValueError("Download strategy and tracker are required when download_songs=True")
+
     progress = progress or _NullProgress()
 
     playlist_name, playlist_description = spotify.get_playlist_details()
@@ -122,9 +125,6 @@ def convert_playlist(
                 skipped_not_found += 1
 
             if download_songs:
-                if not download_strategy or not tracker:
-                    raise ValueError("Download strategy and tracker are required when download_songs=True")
-
                 if tracker.is_downloaded(song_query):
                     skipped_already_downloaded += 1
                 else:

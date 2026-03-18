@@ -27,10 +27,13 @@ class YouTubeService:
         
         If `description` is not provided, defaults to 'Playlist from Spotify'.
         """
-        playlists = self.youtube.playlists().list(part="snippet", mine=True).execute()
-        for playlist in playlists.get("items", []):
-            if playlist["snippet"]["title"] == title:
-                return playlist["id"]
+        request = self.youtube.playlists().list(part="snippet", mine=True, maxResults=50)
+        while request:
+            response = request.execute()
+            for playlist in response.get("items", []):
+                if playlist["snippet"]["title"] == title:
+                    return playlist["id"]
+            request = self.youtube.playlists().list_next(request, response)
             
         # Create playlist
         response = self.youtube.playlists().insert(
@@ -53,18 +56,18 @@ class YouTubeService:
         Retrieve a set of video IDs currently in the given playlist.
         """
         video_ids = set()
-        request = self.youtube.playlistItems().list(part="snippet", playlistId=playlist_id, maxResults=50) # YouTube API allows up to 50 per request
+        request = self.youtube.playlist_items().list(part="snippet", playlistId=playlist_id, maxResults=50) # YouTube API allows up to 50 per request
         while request:
             response = request.execute()
             video_ids.update(item["snippet"]["resourceId"]["videoId"] for item in response.get("items", []))
-            request = self.youtube.playlistItems().list_next(request, response)
+            request = self.youtube.playlist_items().list_next(request, response)
         return video_ids
     
     def add_song_to_playlist(self, video_id: str, playlist_id: str):
         """
         Add a video to a playlist using its video ID.
         """
-        self.youtube.playlistItems().insert(
+        self.youtube.playlist_items().insert(
             part='snippet',
             body={
                 'snippet': {
