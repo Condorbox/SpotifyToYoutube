@@ -1,5 +1,6 @@
 import os
 import argparse
+from enum import Enum
 from colorama import Fore, Style
 import logging
 from dotenv import load_dotenv
@@ -11,8 +12,13 @@ ERROR_COLOR = Fore.RED
 MESSAGE_COLOR = Fore.BLUE
 
 TRACKER_FILE = "downloaded_songs.json"
+SNAPSHOT_FILE = "playlist_snapshot.json"
 
 load_dotenv()
+
+class Mode(str, Enum):
+    CONVERT = "convert"
+    SYNC = "sync"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,16 +31,15 @@ class Settings:
     download_dir: str | None
     playlist_offset: int
     tracker_file: str | None
+    snapshot_file: str | None
     download: bool
     no_download: bool
+    mode: Mode
     log_level: str
     log_file: str | None
 
 
-def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Convert a Spotify playlist to YouTube and optionally download songs."
-    )
+def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--client-id", default=os.environ.get("CLIENT_ID"), help="Spotify client ID")
     parser.add_argument("--client-secret", default=os.environ.get("CLIENT_SECRET"), help="Spotify client secret")
     parser.add_argument("--redirect-uri", default=os.environ.get("REDIRECT_URI"), help="Spotify redirect URI")
@@ -52,10 +57,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=os.environ.get("TRACKER_FILE"),
         help="Path to the download tracker JSON file (default: downloaded_songs.json next to the script)",
     )
+    parser.add_argument(
+        "--snapshot-file",
+        default=os.environ.get("SNAPSHOT_FILE"),
+        help="Path to the playlist snapshot JSON file (default: playlist_snapshot.json next to the script)",
+    )
 
     download_group = parser.add_mutually_exclusive_group()
     download_group.add_argument("--download", action="store_true", default=False, help="Download songs without prompting")
     download_group.add_argument("--no-download", action="store_true", help="Skip download without prompting")
+
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        default=False,
+        help="Run in sync (incremental) mode (alias for the sync subcommand)",
+    )
 
     parser.add_argument(
         "--log-level",
@@ -64,11 +81,32 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Logging verbosity (default: INFO)",
     )
     parser.add_argument("--log-file", default=None, help="Optional path to write logs to a file")
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    _add_common_args(common)
+
+    parser = argparse.ArgumentParser(
+        description="Convert a Spotify playlist to YouTube and optionally download songs.",
+        parents=[common],
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+    subparsers.add_parser("convert", parents=[common], help="Full conversion (default)")
+    subparsers.add_parser("sync", parents=[common], help="Incremental sync (only new tracks)")
+    parser.set_defaults(command="convert")
+
     return parser
 
 
 def load_settings(argv: list[str] | None = None) -> Settings:
     args = build_arg_parser().parse_args(argv)
+    mode = (
+        Mode.SYNC
+        if getattr(args, "command", "convert") == Mode.SYNC.value or getattr(args, "sync", False)
+        else Mode.CONVERT
+    )
     settings = Settings(
         client_id=args.client_id,
         client_secret=args.client_secret,
@@ -78,8 +116,10 @@ def load_settings(argv: list[str] | None = None) -> Settings:
         download_dir=args.download_dir,
         playlist_offset=args.playlist_offset,
         tracker_file=args.tracker_file,
+        snapshot_file=args.snapshot_file,
         download=args.download,
         no_download=args.no_download,
+        mode=mode,
         log_level=args.log_level,
         log_file=args.log_file,
     )

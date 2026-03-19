@@ -2,12 +2,14 @@ import logging
 from tqdm import tqdm
 
 from resume_tracker import ResumeTracker
+from playlist_snapshot import PlaylistSnapshot
 from youtube_service import YouTubeService
 from spotify_service import SpotifyService
 from yt_dlp_helper import YTDLPHelper, YTDLPMode
 from playlist_converter import convert_playlist
+from sync_mode import build_single_page_playlist, collect_playlist_items, diff_playlist_items
 
-from config import ERROR_COLOR, RESET_COLOR, MESSAGE_COLOR, setup_logging, load_settings
+from config import ERROR_COLOR, RESET_COLOR, MESSAGE_COLOR, Mode, setup_logging, load_settings
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,44 @@ def get_user_choice(prompt):
 if __name__ == '__main__':
     settings = load_settings()
     setup_logging(settings.log_level, settings.log_file)
+
+    sp_service = SpotifyService(settings)
+    snapshot = PlaylistSnapshot.from_settings(settings.snapshot_file)
+
+    sp_playlist = sp_service.get_playlist()
+    spotify_playlist_for_convert = sp_playlist
+    snapshot_current_ids: set[str] | None = None
+
+    if settings.mode == Mode.SYNC:
+        previous = snapshot.get(settings.playlist_id).track_ids if settings.playlist_id else set()
+        current_items = collect_playlist_items(sp_service, sp_playlist)
+        diff = diff_playlist_items(previous_track_ids=previous, current_items=current_items)
+        snapshot_current_ids = diff.current_track_ids
+
+        logger.info(
+            "Sync diff: %s%d added%s, %s%d removed%s",
+            MESSAGE_COLOR,
+            len(diff.added_track_ids),
+            RESET_COLOR,
+            MESSAGE_COLOR,
+            len(diff.removed_track_ids),
+            RESET_COLOR,
+        )
+        if diff.missing_identifier_count:
+            logger.warning(
+                "Found %d playlist items without a stable Spotify track identifier; they can't be tracked for sync.",
+                diff.missing_identifier_count,
+            )
+        if diff.removed_track_ids:
+            logger.info("Removals are detected but not removed from the YouTube playlist.")
+
+        if not diff.items_to_process:
+            logger.info("No new tracks to process.")
+            if settings.playlist_id and snapshot_current_ids is not None:
+                snapshot.set(settings.playlist_id, snapshot_current_ids)
+            raise SystemExit(0)
+
+        spotify_playlist_for_convert = build_single_page_playlist(diff.items_to_process)
 
     if settings.download:
         download_songs = True
@@ -41,7 +81,6 @@ if __name__ == '__main__':
 
     # Initialize services
     yt_service = YouTubeService(settings)
-    sp_service = SpotifyService(settings)
     tracker = ResumeTracker.from_settings(settings.tracker_file)
 
     search_strategy = YTDLPHelper.create_strategy(YTDLPMode.SEARCH)
@@ -51,22 +90,24 @@ if __name__ == '__main__':
         else None
     )
 
-    sp_playlist = sp_service.get_playlist()
-
     # Count total tracks for the progress bar
-    total = sp_playlist.get("total", 0)
+    total = spotify_playlist_for_convert.get("total", 0)
+    desc = "Syncing playlist" if settings.mode == Mode.SYNC else "Converting playlist"
 
-    with tqdm(total=total, desc="Converting playlist", unit="track") as progress:
+    with tqdm(total=total, desc=desc, unit="track") as progress:
         result = convert_playlist(
             spotify=sp_service,
             youtube=yt_service,
-            spotify_playlist=sp_playlist,
+            spotify_playlist=spotify_playlist_for_convert,
             search_strategy=search_strategy,
             download_strategy=download_strategy,
             tracker=tracker if download_songs else None,
             download_songs=download_songs,
             progress=progress,
         )
+
+    if settings.mode == Mode.SYNC and settings.playlist_id and snapshot_current_ids is not None:
+        snapshot.set(settings.playlist_id, snapshot_current_ids)
 
     logger.info(f"Playlist: {MESSAGE_COLOR}'{result.playlist_name}'{RESET_COLOR}")
     logger.debug(f"YouTube playlist ID: {result.youtube_playlist_id}")

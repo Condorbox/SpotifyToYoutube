@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from config import Settings
+from config import Mode, Settings
 from youtube_service import YouTubeService
 
 
@@ -17,8 +17,10 @@ def _settings() -> Settings:
         download_dir=None,
         playlist_offset=0,
         tracker_file=None,
+        snapshot_file=None,
         download=False,
         no_download=False,
+        mode=Mode.CONVERT,
         log_level="INFO",
         log_file=None,
     )
@@ -118,7 +120,7 @@ def test_get_or_create_playlist_id_returns_existing_first_page():
     )
     service = YouTubeService(_settings(), youtube_client=yt_client)
 
-    assert service.get_or_create_playlist_id("My Playlist") == "pl1"
+    assert service.get_or_create_playlist_id("My Playlist") == ("pl1", False)
     assert yt_client._playlists.insert_calls == []
     assert yt_client._playlists.list_calls == [{"part": "snippet", "mine": True, "maxResults": 50}]
     assert yt_client._playlists.list_next_calls == 0
@@ -133,7 +135,7 @@ def test_get_or_create_playlist_id_paginates_until_found():
     )
     service = YouTubeService(_settings(), youtube_client=yt_client)
 
-    assert service.get_or_create_playlist_id("My Playlist") == "pl2"
+    assert service.get_or_create_playlist_id("My Playlist") == ("pl2", False)
     assert yt_client._playlists.insert_calls == []
     assert yt_client._playlists.list_next_calls == 1
 
@@ -148,7 +150,7 @@ def test_get_or_create_playlist_id_creates_playlist_if_missing():
     )
     service = YouTubeService(_settings(), youtube_client=yt_client)
 
-    assert service.get_or_create_playlist_id("My Playlist", description="From Spotify") == "new999"
+    assert service.get_or_create_playlist_id("My Playlist", description="From Spotify") == ("new999", True)
     assert yt_client._playlists.list_next_calls == 2
     assert yt_client._playlists.insert_calls == [
         {

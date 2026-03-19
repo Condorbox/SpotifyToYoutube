@@ -37,6 +37,7 @@ You can provide configuration via **CLI flags** or **environment variables** (in
    DOWNLOAD_DIR=<Path to the directory where downloaded audio files will be saved (required only when downloading)>
    PLAYLIST_OFFSET=<Offset for Spotify playlist pagination (default: 0)>
    TRACKER_FILE=<Path to the download tracker JSON file (optional, defaults to ./downloaded_songs.json)>
+   SNAPSHOT_FILE=<Path to the playlist snapshot JSON file (optional, defaults to ./playlist_snapshot.json)>
    ```
 
 2. Install program dependencies:
@@ -59,7 +60,8 @@ Common CLI options:
 
 - Spotify: `--client-id`, `--client-secret`, `--redirect-uri`, `--playlist-id` (or `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `PLAYLIST_ID`)
 - YouTube: `--json-url` (or `JSON_URL`)
-- Downloading: `--download` / `--no-download`, `--download-dir` (or `DOWNLOAD_DIR`), `--tracker-file`
+- Downloading: `--download` / `--no-download`, `--download-dir` (or `DOWNLOAD_DIR`), `--tracker-file` (or `TRACKER_FILE`)
+- Sync: `sync` subcommand or `--sync`, `--snapshot-file` (or `SNAPSHOT_FILE`)
 - Other: `--playlist-offset`, `--log-level`, `--log-file`
 
 By default, the program will prompt you whether to download songs. You can skip the prompt with:
@@ -79,6 +81,24 @@ Example: convert playlist + download audio:
 python main.py --download --download-dir ./downloads
 ```
 
+### Sync mode (incremental updates)
+
+Use sync mode to only process tracks added to the Spotify playlist since the last run. After a successful run, the tool stores a snapshot of Spotify track IDs in `playlist_snapshot.json` (configurable via `--snapshot-file` / `SNAPSHOT_FILE`).
+
+First sync run (no snapshot yet) behaves like a full conversion, then future runs only process additions:
+
+```bash
+python main.py sync --no-download
+```
+
+Alias flag (equivalent to the `sync` subcommand):
+
+```bash
+python main.py --sync --no-download
+```
+
+Note: removals are detected and logged, but the tool currently does not remove videos from the YouTube playlist.
+
 The program performs the following steps:
 1. Authenticates with the Spotify and YouTube APIs.
 2. Retrieves the playlist name and description from Spotify.
@@ -90,6 +110,7 @@ The program performs the following steps:
 
 ## Features
 + **Spotify to YouTube Playlist Conversion**: Converts a Spotify playlist into a YouTube playlist.
++ **Incremental Sync Mode**: Processes only tracks added since the last run (stores a playlist snapshot on disk).
 + **YouTube Playlist Management**: Creates a new YouTube playlist if it doesn't exist or update if it exist.
 + **Duplicate Video Prevention**: Ensures that a song is not added to the YouTube playlist more than once.
 + **Song Downloading with Metadata**: Downloads songs in mp3 format and automatically embeds artist, album, and title metadata using yt-dlp and FFmpeg.

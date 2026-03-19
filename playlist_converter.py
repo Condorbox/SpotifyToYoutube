@@ -14,7 +14,7 @@ class SpotifyClient(Protocol):
 
 
 class YouTubeClient(Protocol):
-    def get_or_create_playlist_id(self, title: str, description: str = ...) -> str: ...
+    def get_or_create_playlist_id(self, title: str, description: str = ...) -> tuple[str, bool]: ...
 
     def get_existing_video_ids(self, playlist_id: str) -> Set[str]: ...
 
@@ -132,8 +132,10 @@ def convert_playlist(
     progress = progress or _NullProgress()
 
     playlist_name, playlist_description = spotify.get_playlist_details()
-    youtube_playlist_id = youtube.get_or_create_playlist_id(title=playlist_name, description=playlist_description)
-    existing_video_ids = youtube.get_existing_video_ids(playlist_id=youtube_playlist_id)
+    youtube_playlist_id, created = youtube.get_or_create_playlist_id(
+        title=playlist_name, description=playlist_description
+    )
+    existing_video_ids = set() if created else youtube.get_existing_video_ids(playlist_id=youtube_playlist_id)
 
     total = int(spotify_playlist.get("total") or 0)
     processed = 0

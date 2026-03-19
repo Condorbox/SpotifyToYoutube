@@ -29,16 +29,19 @@ class FakeSpotify:
 
 
 class FakeYouTube:
-    def __init__(self, existing: set[str] | None = None):
+    def __init__(self, existing: set[str] | None = None, *, created: bool = False):
         self.added: list[tuple[str, str]] = []
         self._existing = set(existing or set())
+        self._created = created
 
-    def get_or_create_playlist_id(self, title: str, description: str = "Playlist from Spotify") -> str:
+    def get_or_create_playlist_id(self, title: str, description: str = "Playlist from Spotify") -> tuple[str, bool]:
         assert title == "My Playlist"
-        return "yt123"
+        return ("yt123", self._created)
 
     def get_existing_video_ids(self, playlist_id: str) -> set[str]:
         assert playlist_id == "yt123"
+        if self._created:
+            raise AssertionError("get_existing_video_ids should not be called for newly created playlists")
         return set(self._existing)
 
     def add_song_to_playlist(self, video_id: str, playlist_id: str):
@@ -176,3 +179,29 @@ def test_convert_playlist_without_downloads():
     assert youtube.added == [("v1", "yt123")]
     assert progress.updated == 1
 
+
+def test_convert_playlist_skips_existing_video_ids_when_youtube_playlist_created():
+    page = {
+        "total": 1,
+        "next": None,
+        "items": [_track_item(title="Song1", artist="Artist1")],
+    }
+
+    spotify = FakeSpotify(pages=[page])
+    youtube = FakeYouTube(existing={"v1"}, created=True)
+    search = FakeSearchStrategy({"Artist1 - Song1": "v1"})
+    progress = FakeProgress()
+
+    result = convert_playlist(
+        spotify=spotify,
+        youtube=youtube,
+        spotify_playlist=page,
+        search_strategy=search,
+        download_strategy=None,
+        tracker=None,
+        download_songs=False,
+        progress=progress,
+    )
+
+    assert result.added_to_youtube == 1
+    assert youtube.added == [("v1", "yt123")]

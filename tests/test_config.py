@@ -1,6 +1,6 @@
 import pytest
 
-from config import load_settings
+from config import Mode, load_settings
 
 
 def test_load_settings_reads_cli_args():
@@ -30,6 +30,47 @@ def test_load_settings_reads_cli_args():
     assert settings.json_url == "/tmp/creds.json"
     assert settings.playlist_offset == 5
     assert settings.log_level == "DEBUG"
+    assert settings.mode == Mode.CONVERT
+
+
+def test_load_settings_sync_subcommand_sets_mode():
+    settings = load_settings(
+        argv=[
+            "sync",
+            "--client-id",
+            "id",
+            "--client-secret",
+            "secret",
+            "--redirect-uri",
+            "http://localhost/",
+            "--playlist-id",
+            "playlist",
+            "--json-url",
+            "/tmp/creds.json",
+        ]
+    )
+
+    assert settings.mode == Mode.SYNC
+
+
+def test_load_settings_sync_flag_sets_mode():
+    settings = load_settings(
+        argv=[
+            "--sync",
+            "--client-id",
+            "id",
+            "--client-secret",
+            "secret",
+            "--redirect-uri",
+            "http://localhost/",
+            "--playlist-id",
+            "playlist",
+            "--json-url",
+            "/tmp/creds.json",
+        ]
+    )
+
+    assert settings.mode == Mode.SYNC
 
 
 def test_load_settings_requires_required_fields(monkeypatch):

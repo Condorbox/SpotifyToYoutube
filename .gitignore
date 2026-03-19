@@ -189,3 +189,7 @@ cython_debug/
 *.mp3
 *.opus
 *.ogg
+
+# Runtime state files
+downloaded_songs.json
+playlist_snapshot.json

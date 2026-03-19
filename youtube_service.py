@@ -21,9 +21,11 @@ class YouTubeService:
         credentials = flow.run_local_server(port=8080, prompt="consent")
         return googleapiclient.discovery.build('youtube', 'v3', credentials=credentials)
     
-    def get_or_create_playlist_id(self, title: str, description: str = "Playlist from Spotify") -> str:
+    def get_or_create_playlist_id(self, title: str, description: str = "Playlist from Spotify") -> tuple[str, bool]:
         """
         Retrieve an existing playlist ID by title or create a new one if it doesn't exist.
+
+        Returns a tuple of (playlist_id, created).
         
         If `description` is not provided, defaults to 'Playlist from Spotify'.
         """
@@ -32,7 +34,7 @@ class YouTubeService:
             response = request.execute()
             for playlist in response.get("items", []):
                 if playlist["snippet"]["title"] == title:
-                    return playlist["id"]
+                    return playlist["id"], False
             request = self.youtube.playlists().list_next(request, response)
             
         # Create playlist
@@ -49,14 +51,18 @@ class YouTubeService:
             }
         ).execute()
 
-        return response["id"]
+        return response["id"], True
     
     def get_existing_video_ids(self, playlist_id: str) -> Set[str]:
         """
         Retrieve a set of video IDs currently in the given playlist.
         """
         video_ids = set()
-        request = self.youtube.playlistItems().list(part="snippet", playlistId=playlist_id, maxResults=50) # YouTube API allows up to 50 per request
+        # Paginate through all results
+        request = self.youtube.playlistItems().list(
+            part="snippet", playlistId=playlist_id, maxResults=50
+        )
+
         while request:
             response = request.execute()
             video_ids.update(item["snippet"]["resourceId"]["videoId"] for item in response.get("items", []))
@@ -79,4 +85,3 @@ class YouTubeService:
                 }
             }
         ).execute()
-
