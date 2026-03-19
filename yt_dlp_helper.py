@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import Enum
 import os
 import subprocess
@@ -13,7 +14,8 @@ class YTDLPMode(Enum):
     DOWNLOAD = "download"
 
 # Abstract Strategy Interface
-class YTDLPStrategy:
+class YTDLPStrategy(ABC):
+    @abstractmethod
     def execute(self, song: str, video_id: Optional[str] = None, track_metadata: Optional[dict] = None) -> Optional[str]:
         """Abstract method to be implemented by all strategies"""
         raise NotImplementedError
@@ -140,11 +142,10 @@ class YTDLPHelper:
         """Factory method to return the appropriate strategy."""
         if mode == YTDLPMode.SEARCH:
             return SearchStrategy()
-        if mode == YTDLPMode.DOWNLOAD:
+        elif mode == YTDLPMode.DOWNLOAD:
             if not download_dir:
                 raise ValueError("download_dir is required for download mode")
             return DownloadStrategy(download_dir)
-
         else:
             raise ValueError(f"{ERROR_COLOR}Invalid mode: {mode}{RESET_COLOR}")
 
