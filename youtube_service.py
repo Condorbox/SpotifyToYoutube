@@ -56,11 +56,11 @@ class YouTubeService:
         Retrieve a set of video IDs currently in the given playlist.
         """
         video_ids = set()
-        request = self.youtube.playlist_items().list(part="snippet", playlistId=playlist_id, maxResults=50) # YouTube API allows up to 50 per request
+        request = self.youtube.playlistItems().list(part="snippet", playlistId=playlist_id, maxResults=50) # YouTube API allows up to 50 per request
         while request:
             response = request.execute()
             video_ids.update(item["snippet"]["resourceId"]["videoId"] for item in response.get("items", []))
-            request = self.youtube.playlist_items().list_next(request, response)
+            request = self.youtube.playlistItems().list_next(request, response)
         return video_ids
     
     def add_song_to_playlist(self, video_id: str, playlist_id: str):
