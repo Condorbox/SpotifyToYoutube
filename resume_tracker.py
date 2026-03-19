@@ -2,10 +2,9 @@ import json
 import logging
 import os
 
+from config import TRACKER_FILE
+
 logger = logging.getLogger(__name__)
-
-TRACKER_FILE = "downloaded_songs.json"
-
 
 class ResumeTracker:
     """
@@ -16,6 +15,22 @@ class ResumeTracker:
     def __init__(self, filepath: str = TRACKER_FILE):
         self.filepath = filepath
         self._downloaded: set[str] = self._load()
+
+    @classmethod
+    def from_settings(cls, custom_path: str | None) -> "ResumeTracker":
+        """Resolve the tracker filepath, warning and falling back to default if custom path doesn't exist."""
+        if custom_path:
+            if not os.path.exists(custom_path):
+                logger.warning(
+                    f"Tracker file '{custom_path}' does not exist. Falling back to default: {TRACKER_FILE}"
+                )
+            elif not os.path.isfile(custom_path):
+                logger.warning(
+                    f"Tracker path '{custom_path}' is not a file. Falling back to default: {TRACKER_FILE}"
+                )
+            else:
+                return cls(filepath=custom_path)
+        return cls()
 
     def _load(self) -> set[str]:
         if os.path.exists(self.filepath):

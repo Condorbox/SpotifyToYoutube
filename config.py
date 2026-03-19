@@ -10,6 +10,8 @@ WARNING_COLOR = Fore.YELLOW
 ERROR_COLOR = Fore.RED
 MESSAGE_COLOR = Fore.BLUE
 
+TRACKER_FILE = "downloaded_songs.json"
+
 load_dotenv()
 
 
@@ -22,6 +24,7 @@ class Settings:
     json_url: str | None
     download_dir: str | None
     playlist_offset: int
+    tracker_file: str | None
     download: bool
     no_download: bool
     log_level: str
@@ -43,6 +46,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=int(os.environ.get("PLAYLIST_OFFSET") or 0),
         type=int,
         help="Offset for Spotify playlist pagination (default: 0)",
+    )
+    parser.add_argument(
+        "--tracker-file",
+        default=os.environ.get("TRACKER_FILE"),
+        help="Path to the download tracker JSON file (default: downloaded_songs.json next to the script)",
     )
 
     download_group = parser.add_mutually_exclusive_group()
@@ -69,6 +77,7 @@ def load_settings(argv: list[str] | None = None) -> Settings:
         json_url=args.json_url,
         download_dir=args.download_dir,
         playlist_offset=args.playlist_offset,
+        tracker_file=args.tracker_file,
         download=args.download,
         no_download=args.no_download,
         log_level=args.log_level,

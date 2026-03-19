@@ -7,7 +7,7 @@ from spotify_service import SpotifyService
 from yt_dlp_helper import YTDLPHelper, YTDLPMode
 from playlist_converter import convert_playlist
 
-from config import ERROR_COLOR, RESET_COLOR, MESSAGE_COLOR, WARNING_COLOR, setup_logging, load_settings
+from config import ERROR_COLOR, RESET_COLOR, MESSAGE_COLOR, setup_logging, load_settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ if __name__ == '__main__':
     # Initialize services
     yt_service = YouTubeService(settings)
     sp_service = SpotifyService(settings)
-    tracker = ResumeTracker()
+    tracker = ResumeTracker.from_settings(settings.tracker_file)
 
     search_strategy = YTDLPHelper.create_strategy(YTDLPMode.SEARCH)
     download_strategy = (

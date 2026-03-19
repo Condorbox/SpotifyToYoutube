@@ -36,6 +36,7 @@ You can provide configuration via **CLI flags** or **environment variables** (in
    PLAYLIST_ID=<The ID of the Spotify playlist you want to convert>
    DOWNLOAD_DIR=<Path to the directory where downloaded audio files will be saved (required only when downloading)>
    PLAYLIST_OFFSET=<Offset for Spotify playlist pagination (default: 0)>
+   TRACKER_FILE=<Path to the download tracker JSON file (optional, defaults to ./downloaded_songs.json)>
    ```
 
 2. Install program dependencies:
@@ -58,7 +59,7 @@ Common CLI options:
 
 - Spotify: `--client-id`, `--client-secret`, `--redirect-uri`, `--playlist-id` (or `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `PLAYLIST_ID`)
 - YouTube: `--json-url` (or `JSON_URL`)
-- Downloading: `--download` / `--no-download`, `--download-dir` (or `DOWNLOAD_DIR`)
+- Downloading: `--download` / `--no-download`, `--download-dir` (or `DOWNLOAD_DIR`), `--tracker-file`
 - Other: `--playlist-offset`, `--log-level`, `--log-file`
 
 By default, the program will prompt you whether to download songs. You can skip the prompt with:
