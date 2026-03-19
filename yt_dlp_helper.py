@@ -1,12 +1,15 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+import logging
 import os
 import subprocess
 from typing import List, Optional
 import urllib.request
 
-from config import ERROR_COLOR, RESET_COLOR, WARNING_COLOR
+from config import ERROR_COLOR, RESET_COLOR
 from utils import sanitize_filename
+
+logger = logging.getLogger(__name__)
 
 
 class YTDLPMode(Enum):
@@ -43,6 +46,8 @@ class DownloadStrategy(YTDLPStrategy):
 
             webm_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.webm"))
             mp3_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.mp3"))
+            temp_output_file = mp3_output_path.replace(".mp3", "_tmp.mp3")
+            cover_path = mp3_output_path.replace(".mp3", "_cover.jpg")
 
             video_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -53,20 +58,63 @@ class DownloadStrategy(YTDLPStrategy):
                 if not os.path.exists(webm_output_path):
                     return None
 
-                # Convert WebM to MP3
-                convert_command = [
-                    "ffmpeg",
-                    "-y",  # Automatically overwrite existing files
-                    "-i", f"{webm_output_path}",
-                    "-vn",  # Ignore video
-                    "-acodec", "libmp3lame",  # Use MP3 codec
-                    "-b:a", "128k",  # Bitrate
-                    f"{mp3_output_path}",
-                ]
-                subprocess.run(convert_command, check=True)
+                cover_url = track_metadata.get("cover_url") if track_metadata else None
+                cover_available = False
+                if isinstance(cover_url, str) and cover_url.strip():
+                    try:
+                        urllib.request.urlretrieve(cover_url, cover_path)
+                        cover_available = True
+                    except Exception:
+                        logger.warning("Failed downloading cover art for %s", song, exc_info=True)
+
+                command = ["ffmpeg", "-y", "-i", webm_output_path]
+                if cover_available:
+                    command.extend(
+                        [
+                            "-i",
+                            cover_path,
+                            "-map",
+                            "0:a",
+                            "-map",
+                            "1:v",
+                            "-disposition:v:0",
+                            "attached_pic",
+                            "-metadata:s:v",
+                            "title=Album cover",
+                            "-metadata:s:v",
+                            "comment=Cover (front)",
+                            "-c:v",
+                            "mjpeg",
+                        ]
+                    )
+                else:
+                    command.extend(["-map", "0:a"])
+
+                command.extend(
+                    [
+                        "-c:a",
+                        "libmp3lame",
+                        "-b:a",
+                        "128k",
+                        "-id3v2_version",
+                        "3",
+                    ]
+                )
 
                 if track_metadata:
-                    self._add_metadata(mp3_output_path, track_metadata)
+                    metadata_fields = {
+                        "title": track_metadata.get("title", ""),
+                        "artist": track_metadata.get("artist", ""),
+                        "album": track_metadata.get("album", ""),
+                    }
+
+                    for key, value in metadata_fields.items():
+                        if value:
+                            command.extend(["-metadata", f"{key}={value}"])
+
+                command.append(temp_output_file)
+                subprocess.run(command, check=True)
+                os.replace(temp_output_file, mp3_output_path)
 
                 return mp3_output_path
 
@@ -74,67 +122,14 @@ class DownloadStrategy(YTDLPStrategy):
                 # Remove original WebM file
                 if os.path.exists(webm_output_path):
                     os.remove(webm_output_path)
+                if os.path.exists(temp_output_file):
+                    os.remove(temp_output_file)
+                if os.path.exists(cover_path):
+                    os.remove(cover_path)
 
-        except Exception as e:
-            print(f"Conversion failed for {song}: {e}")
+        except Exception:
+            logger.exception("Conversion failed for %s", song)
             return None
-
-    def _add_metadata(self, input_file: str, track_metadata: dict):
-        """Embed metadata (title, artist, album, and cover) into the file."""
-        cover_path = input_file.replace(".mp3", "_cover.jpg")
-        temp_output_file = input_file.replace(".mp3", "_tmp.mp3")
-        try:
-            cover_url = track_metadata.get("cover_url")
-
-            command = ["ffmpeg", "-y", "-i", input_file]
-
-            if cover_url:
-                urllib.request.urlretrieve(cover_url, cover_path)
-                command.extend(
-                    [
-                        "-i",
-                        cover_path,
-                        "-map",
-                        "0:a",
-                        "-map",
-                        "1:v",
-                        "-c",
-                        "copy",
-                        "-id3v2_version",
-                        "3",
-                        "-metadata:s:v",
-                        "title=Album cover",
-                        "-metadata:s:v",
-                        "comment=Cover (front)",
-                    ]
-                )
-            else:
-                command.extend(["-map", "0:a", "-c", "copy", "-id3v2_version", "3"])
-
-            # Add metadata fields
-            metadata_fields = {
-                "title": track_metadata.get("title", ""),
-                "artist": track_metadata.get("artist", ""),
-                "album": track_metadata.get("album", ""),
-            }
-            
-            for key, value in metadata_fields.items():
-                command.extend(["-metadata", f"{key}={value}"])
-            
-            command.append(temp_output_file)
-            
-            subprocess.run(command, check=True)
-            os.replace(temp_output_file, input_file)
-        
-        except subprocess.CalledProcessError as e:
-            print(f"{ERROR_COLOR}Error adding metadata to {input_file}: {e}{RESET_COLOR}")
-        except Exception as e:
-            print(f"{ERROR_COLOR}Unexpected error: {e}{RESET_COLOR}")
-        finally:
-            if os.path.exists(temp_output_file):
-                os.remove(temp_output_file)
-            if os.path.exists(cover_path):
-                os.remove(cover_path)
     
 class YTDLPHelper:
     @staticmethod
@@ -156,19 +151,19 @@ class YTDLPHelper:
         try:
             result = subprocess.run(command, capture_output=True, text=True)
         except FileNotFoundError:
-            print(f"{ERROR_COLOR}yt-dlp not found on PATH. Install it and try again.{RESET_COLOR}")
+            logger.error("yt-dlp not found on PATH. Install it and try again.")
             return None
-        except Exception as e:
-            print(f"{ERROR_COLOR}Unexpected error: {e}{RESET_COLOR}")
+        except Exception:
+            logger.exception("Unexpected error running yt-dlp")
             return None
 
         # Check for errors
         if result.returncode != 0:
-            print(f"{ERROR_COLOR}Error executing yt-dlp: {result.stderr}{RESET_COLOR}")
+            logger.error("Error executing yt-dlp: %s", (result.stderr or "").strip())
             return None  # Return None to indicate failure
         
         # Check for warnings in stderr (yt-dlp may still succeed with warnings)
         if result.stderr:
-            print(f"{WARNING_COLOR}Warning from yt-dlp: {result.stderr.strip()}{RESET_COLOR}")
+            logger.debug("yt-dlp stderr: %s", result.stderr.strip())
 
         return result.stdout.strip()

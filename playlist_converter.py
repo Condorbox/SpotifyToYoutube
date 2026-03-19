@@ -47,6 +47,60 @@ class _NullProgress:
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class TrackMeta:
+    title: str
+    artist: str
+    album: str
+    cover_url: str | None
+
+    @property
+    def query(self) -> str:
+        return f"{self.artist} - {self.title}"
+
+
+def parse_track(track_info: Any) -> TrackMeta | None:
+    if not isinstance(track_info, dict):
+        return None
+
+    title = track_info.get("name")
+    if not isinstance(title, str) or not title.strip():
+        return None
+
+    artists = track_info.get("artists") or []
+    if not isinstance(artists, list):
+        return None
+
+    artist_names = [
+        artist.get("name")
+        for artist in artists
+        if isinstance(artist, dict) and isinstance(artist.get("name"), str) and artist.get("name", "").strip()
+    ]
+    if not artist_names:
+        return None
+
+    album_info = track_info.get("album") or {}
+    if not isinstance(album_info, dict):
+        album_info = {}
+
+    album_name = album_info.get("name")
+    album = album_name.strip() if isinstance(album_name, str) else ""
+
+    cover_url: str | None = None
+    images = album_info.get("images") or []
+    if isinstance(images, list) and images:
+        first = images[0]
+        if isinstance(first, dict) and isinstance(first.get("url"), str):
+            cover_url = first["url"]
+
+    return TrackMeta(
+        title=title.strip(),
+        artist="/".join(artist_names),
+        album=album,
+        cover_url=cover_url,
+    )
+
+
 @dataclass(slots=True)
 class ConvertResult:
     playlist_name: str
@@ -93,22 +147,15 @@ def convert_playlist(
     sp_playlist = spotify_playlist
     while True:
         for track in sp_playlist.get("items", []):
-            track_info = track.get("track")
-
-            if not track_info:
+            meta = parse_track(track.get("track"))
+            if not meta:
                 skipped_unavailable += 1
                 processed += 1
                 progress.update(1)
                 continue
 
-            track_metadata = {
-                "title": track_info["name"],
-                "album": track_info["album"]["name"],
-                "artist": "/".join([artist["name"] for artist in track_info["artists"]]),
-                "cover_url": track_info["album"]["images"][0]["url"] if track_info["album"]["images"] else None,
-            }
-
-            song_query = f"{track_metadata['artist']} - {track_metadata['title']}"
+            track_metadata = {"title": meta.title, "album": meta.album, "artist": meta.artist, "cover_url": meta.cover_url}
+            song_query = meta.query
             progress.set_postfix_str(song_query[:50])
             logger.debug("Processing: %s", song_query)
 
