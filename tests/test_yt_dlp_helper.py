@@ -23,6 +23,15 @@ def test_run_yt_dlp_error_returns_none(monkeypatch):
     assert yt_dlp_helper.YTDLPHelper._run_yt_dlp(["--version"]) is None
 
 
+def test_run_yt_dlp_missing_binary_returns_none(monkeypatch):
+    def fake_run(cmd, capture_output, text):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(yt_dlp_helper.subprocess, "run", fake_run)
+
+    assert yt_dlp_helper.YTDLPHelper._run_yt_dlp(["--version"]) is None
+
+
 def test_download_strategy_converts_and_cleans_up(tmp_path, monkeypatch):
     download_dir = str(tmp_path)
     song = "Artist - Title"

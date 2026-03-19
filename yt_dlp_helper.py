@@ -153,7 +153,14 @@ class YTDLPHelper:
     def _run_yt_dlp(command_args: List[str]) -> Optional[str]:
         """Private method to run yt-dlp."""
         command = ["yt-dlp"] + command_args
-        result = subprocess.run(command, capture_output=True, text=True)
+        try:
+            result = subprocess.run(command, capture_output=True, text=True)
+        except FileNotFoundError:
+            print(f"{ERROR_COLOR}yt-dlp not found on PATH. Install it and try again.{RESET_COLOR}")
+            return None
+        except Exception as e:
+            print(f"{ERROR_COLOR}Unexpected error: {e}{RESET_COLOR}")
+            return None
 
         # Check for errors
         if result.returncode != 0:
