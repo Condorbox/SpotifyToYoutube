@@ -16,6 +16,7 @@ def _settings() -> Settings:
         json_url=None,
         download_dir=None,
         playlist_offset=0,
+        tracker_file=None,
         download=False,
         no_download=False,
         log_level="INFO",
@@ -98,6 +99,9 @@ class _FakeYouTubeClient:
 
     def playlists(self) -> _FakePlaylistsResource:
         return self._playlists
+
+    def playlistItems(self) -> _FakePlaylistItemsResource:
+        return self._playlist_items
 
     def playlist_items(self) -> _FakePlaylistItemsResource:
         return self._playlist_items
