@@ -103,8 +103,6 @@ class _FakeYouTubeClient:
     def playlistItems(self) -> _FakePlaylistItemsResource:
         return self._playlist_items
 
-    def playlist_items(self) -> _FakePlaylistItemsResource:
-        return self._playlist_items
 
 
 def test_get_or_create_playlist_id_returns_existing_first_page():

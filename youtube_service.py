@@ -67,7 +67,7 @@ class YouTubeService:
         """
         Add a video to a playlist using its video ID.
         """
-        self.youtube.playlist_items().insert(
+        self.youtube.playlistItems().insert(
             part='snippet',
             body={
                 'snippet': {
