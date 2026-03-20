@@ -18,6 +18,8 @@ def test_load_settings_reads_cli_args():
             "/tmp/creds.json",
             "--playlist-offset",
             "5",
+            "--workers",
+            "4",
             "--log-level",
             "DEBUG",
         ]
@@ -29,6 +31,7 @@ def test_load_settings_reads_cli_args():
     assert settings.playlist_id == "playlist"
     assert settings.json_url == "/tmp/creds.json"
     assert settings.playlist_offset == 5
+    assert settings.workers == 4
     assert settings.log_level == "DEBUG"
     assert settings.mode == Mode.CONVERT
 
@@ -95,6 +98,25 @@ def test_load_settings_download_flags_are_mutually_exclusive():
         "/tmp/creds.json",
         "--download",
         "--no-download",
+    ]
+    with pytest.raises(SystemExit):
+        load_settings(argv=argv)
+
+
+def test_load_settings_rejects_non_positive_workers():
+    argv = [
+        "--client-id",
+        "id",
+        "--client-secret",
+        "secret",
+        "--redirect-uri",
+        "http://localhost/",
+        "--playlist-id",
+        "playlist",
+        "--json-url",
+        "/tmp/creds.json",
+        "--workers",
+        "0",
     ]
     with pytest.raises(SystemExit):
         load_settings(argv=argv)

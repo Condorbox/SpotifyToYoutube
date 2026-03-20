@@ -205,3 +205,37 @@ def test_convert_playlist_skips_existing_video_ids_when_youtube_playlist_created
 
     assert result.added_to_youtube == 1
     assert youtube.added == [("v1", "yt123")]
+
+
+def test_convert_playlist_parallel_workers_prevent_duplicate_adds():
+    page = {
+        "total": 2,
+        "next": None,
+        "items": [
+            _track_item(title="Song1", artist="Artist1"),
+            _track_item(title="Song2", artist="Artist2"),
+        ],
+    }
+
+    spotify = FakeSpotify(pages=[page])
+    youtube = FakeYouTube(existing=set())
+    search = FakeSearchStrategy({"Artist1 - Song1": "v1", "Artist2 - Song2": "v1"})
+    progress = FakeProgress()
+
+    result = convert_playlist(
+        spotify=spotify,
+        youtube=youtube,
+        spotify_playlist=page,
+        search_strategy=search,
+        download_strategy=None,
+        tracker=None,
+        download_songs=False,
+        workers=4,
+        progress=progress,
+    )
+
+    assert result.processed == 2
+    assert result.added_to_youtube == 1
+    assert result.skipped_existing == 1
+    assert youtube.added == [("v1", "yt123")]
+    assert progress.updated == 2

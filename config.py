@@ -32,6 +32,7 @@ class Settings:
     playlist_offset: int
     tracker_file: str | None
     snapshot_file: str | None
+    workers: int
     download: bool
     no_download: bool
     mode: Mode
@@ -61,6 +62,12 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--snapshot-file",
         default=os.environ.get("SNAPSHOT_FILE"),
         help="Path to the playlist snapshot JSON file (default: playlist_snapshot.json next to the script)",
+    )
+    parser.add_argument(
+        "--workers",
+        default=int(os.environ.get("WORKERS") or 1),
+        type=int,
+        help="Number of concurrent track workers (default: 1)",
     )
 
     download_group = parser.add_mutually_exclusive_group()
@@ -117,6 +124,7 @@ def load_settings(argv: list[str] | None = None) -> Settings:
         playlist_offset=args.playlist_offset,
         tracker_file=args.tracker_file,
         snapshot_file=args.snapshot_file,
+        workers=args.workers,
         download=args.download,
         no_download=args.no_download,
         mode=mode,
@@ -142,6 +150,8 @@ def _validate(settings: Settings) -> None:
             f"\n[ERROR] Missing required configuration. "
             f"Provide each value via CLI argument or environment variable:\n  {lines}"
         )
+    if settings.workers < 1:
+        raise SystemExit("\n[ERROR] --workers must be >= 1")
 
 # Set up logging
 def setup_logging(log_level: str, log_file: str | None = None):

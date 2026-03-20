@@ -103,6 +103,7 @@ if __name__ == '__main__':
             download_strategy=download_strategy,
             tracker=tracker if download_songs else None,
             download_songs=download_songs,
+            workers=settings.workers,
             progress=progress,
         )
 

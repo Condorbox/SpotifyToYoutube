@@ -18,6 +18,7 @@ def _settings() -> Settings:
         playlist_offset=0,
         tracker_file=None,
         snapshot_file=None,
+        workers=1,
         download=False,
         no_download=False,
         mode=Mode.CONVERT,

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 
 from config import TRACKER_FILE
 
@@ -14,6 +15,7 @@ class ResumeTracker:
 
     def __init__(self, filepath: str = TRACKER_FILE):
         self.filepath = filepath
+        self._lock = threading.Lock()
         self._downloaded: set[str] = self._load()
 
     @classmethod
@@ -45,20 +47,25 @@ class ResumeTracker:
     def _save(self):
         try:
             with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump({"downloaded": list(self._downloaded)}, f, indent=2)
+                json.dump({"downloaded": sorted(self._downloaded)}, f, indent=2)
         except OSError as e:
             logger.error(f"Could not save resume tracker: {e}")
 
     def is_downloaded(self, song_query: str) -> bool:
-        return song_query in self._downloaded
+        with self._lock:
+            return song_query in self._downloaded
 
     def mark_downloaded(self, song_query: str):
-        self._downloaded.add(song_query)
-        self._save()
+        with self._lock:
+            if song_query in self._downloaded:
+                return
+            self._downloaded.add(song_query)
+            self._save()
 
     def reset(self):
         """Clear all tracked downloads."""
-        self._downloaded.clear()
-        if os.path.exists(self.filepath):
-            os.remove(self.filepath)
+        with self._lock:
+            self._downloaded.clear()
+            if os.path.exists(self.filepath):
+                os.remove(self.filepath)
         logger.info("Resume tracker reset.")

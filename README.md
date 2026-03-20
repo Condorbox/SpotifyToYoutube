@@ -38,6 +38,7 @@ You can provide configuration via **CLI flags** or **environment variables** (in
    PLAYLIST_OFFSET=<Offset for Spotify playlist pagination (default: 0)>
    TRACKER_FILE=<Path to the download tracker JSON file (optional, defaults to ./downloaded_songs.json)>
    SNAPSHOT_FILE=<Path to the playlist snapshot JSON file (optional, defaults to ./playlist_snapshot.json)>
+   WORKERS=<Number of concurrent track workers (default: 1)>
    ```
 
 2. Install program dependencies:
@@ -62,7 +63,7 @@ Common CLI options:
 - YouTube: `--json-url` (or `JSON_URL`)
 - Downloading: `--download` / `--no-download`, `--download-dir` (or `DOWNLOAD_DIR`), `--tracker-file` (or `TRACKER_FILE`)
 - Sync: `sync` subcommand or `--sync`, `--snapshot-file` (or `SNAPSHOT_FILE`)
-- Other: `--playlist-offset`, `--log-level`, `--log-file`
+- Other: `--playlist-offset`, `--workers`, `--log-level`, `--log-file`
 
 By default, the program will prompt you whether to download songs. You can skip the prompt with:
 
@@ -79,6 +80,12 @@ Example: convert playlist + download audio:
 
 ```bash
 python main.py --download --download-dir ./downloads
+```
+
+Example: run with 4 parallel workers:
+
+```bash
+python main.py --workers 4 --no-download
 ```
 
 ### Sync mode (incremental updates)
