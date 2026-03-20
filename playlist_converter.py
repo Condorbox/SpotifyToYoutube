@@ -167,13 +167,6 @@ def convert_playlist(
     existing_video_ids = set() if created else youtube.get_existing_video_ids(playlist_id=youtube_playlist_id)
 
     total = int(spotify_playlist.get("total") or 0)
-    processed = 0
-    added_to_youtube = 0
-    downloaded = 0
-    skipped_unavailable = 0
-    skipped_existing = 0
-    skipped_already_downloaded = 0
-    skipped_not_found = 0
 
     existing_video_ids_lock = threading.Lock()
     youtube_lock = threading.Lock()
@@ -237,41 +230,34 @@ def convert_playlist(
 
     pending: set[Future[_TrackOutcome]] = set()
     max_pending = max(1, workers * 2)
+    outcomes: list[_TrackOutcome] = []
+
+    def _drain(done_drain: set[Future[_TrackOutcome]], result_accumulator: list[_TrackOutcome], progress_drain: Progress) -> None:
+        for future in done_drain:
+            outcome = future.result()
+            result_accumulator.append(outcome)
+            if outcome.song_query:
+                progress_drain.set_postfix_str(outcome.song_query[:50])
+            progress_drain.update(1)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         for item in _iter_playlist_items(spotify, spotify_playlist):
             pending.add(executor.submit(process_track, item))
-            if len(pending) < max_pending:
-                continue
-
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
-            for future in done:
-                outcome = future.result()
-                processed += 1
-                added_to_youtube += outcome.added_to_youtube
-                downloaded += outcome.downloaded
-                skipped_unavailable += outcome.skipped_unavailable
-                skipped_existing += outcome.skipped_existing
-                skipped_already_downloaded += outcome.skipped_already_downloaded
-                skipped_not_found += outcome.skipped_not_found
-                if outcome.song_query:
-                    progress.set_postfix_str(outcome.song_query[:50])
-                progress.update(1)
+            if len(pending) >= max_pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                _drain(done, outcomes, progress)
 
         while pending:
             done, pending = wait(pending, return_when=FIRST_COMPLETED)
-            for future in done:
-                outcome = future.result()
-                processed += 1
-                added_to_youtube += outcome.added_to_youtube
-                downloaded += outcome.downloaded
-                skipped_unavailable += outcome.skipped_unavailable
-                skipped_existing += outcome.skipped_existing
-                skipped_already_downloaded += outcome.skipped_already_downloaded
-                skipped_not_found += outcome.skipped_not_found
-                if outcome.song_query:
-                    progress.set_postfix_str(outcome.song_query[:50])
-                progress.update(1)
+            _drain(done, outcomes, progress)
+
+    processed = len(outcomes)
+    added_to_youtube = sum(outcome.added_to_youtube for outcome in outcomes)
+    downloaded = sum(outcome.downloaded for outcome in outcomes)
+    skipped_unavailable = sum(outcome.skipped_unavailable for outcome in outcomes)
+    skipped_existing = sum(outcome.skipped_existing for outcome in outcomes)
+    skipped_already_downloaded = sum(outcome.skipped_already_downloaded for outcome in outcomes)
+    skipped_not_found = sum(outcome.skipped_not_found for outcome in outcomes)
 
     return ConvertResult(
         playlist_name=playlist_name,
