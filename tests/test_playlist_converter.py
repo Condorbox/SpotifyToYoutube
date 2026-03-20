@@ -73,14 +73,25 @@ class FakeDownloadStrategy:
 class FakeTracker:
     def __init__(self, downloaded: set[str] | None = None):
         self._downloaded = set(downloaded or set())
+        self._claimed: set[str] = set()
         self.marked: list[str] = []
 
     def is_downloaded(self, song_query: str) -> bool:
         return song_query in self._downloaded
 
+    def try_claim(self, song_query: str) -> bool:
+        if song_query in self._downloaded or song_query in self._claimed:
+            return False
+        self._claimed.add(song_query)
+        return True
+
     def mark_downloaded(self, song_query: str) -> None:
+        self._claimed.discard(song_query)
         self._downloaded.add(song_query)
         self.marked.append(song_query)
+
+    def release_claim(self, song_query: str) -> None:
+        self._claimed.discard(song_query)
 
 
 class FakeProgress:
@@ -238,4 +249,45 @@ def test_convert_playlist_parallel_workers_prevent_duplicate_adds():
     assert result.added_to_youtube == 1
     assert result.skipped_existing == 1
     assert youtube.added == [("v1", "yt123")]
+    assert progress.updated == 2
+
+
+def test_convert_playlist_parallel_workers_prevent_duplicate_downloads():
+    page = {
+        "total": 2,
+        "next": None,
+        "items": [
+            _track_item(title="Song1", artist="Artist1"),
+            _track_item(title="Song1", artist="Artist1"),
+        ],
+    }
+
+    spotify = FakeSpotify(pages=[page])
+    youtube = FakeYouTube(existing=set())
+    search = FakeSearchStrategy({"Artist1 - Song1": "v1"})
+    downloader = FakeDownloadStrategy()
+    tracker = FakeTracker(downloaded=set())
+    progress = FakeProgress()
+
+    result = convert_playlist(
+        spotify=spotify,
+        youtube=youtube,
+        spotify_playlist=page,
+        search_strategy=search,
+        download_strategy=downloader,
+        tracker=tracker,
+        download_songs=True,
+        workers=4,
+        progress=progress,
+    )
+
+    assert result.processed == 2
+    assert result.added_to_youtube == 1
+    assert result.skipped_existing == 1
+    assert result.downloaded == 1
+    assert result.skipped_already_downloaded == 1
+
+    assert youtube.added == [("v1", "yt123")]
+    assert len(downloader.calls) == 1
+    assert tracker.marked == ["Artist1 - Song1"]
     assert progress.updated == 2

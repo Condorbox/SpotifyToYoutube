@@ -7,6 +7,7 @@ from config import TRACKER_FILE
 
 logger = logging.getLogger(__name__)
 
+
 class ResumeTracker:
     """
     Persists a set of already-downloaded song queries to a local JSON file.
@@ -17,6 +18,7 @@ class ResumeTracker:
         self.filepath = filepath
         self._lock = threading.Lock()
         self._downloaded: set[str] = self._load()
+        self._claimed: set[str] = set()
 
     @classmethod
     def from_settings(cls, custom_path: str | None) -> "ResumeTracker":
@@ -55,17 +57,30 @@ class ResumeTracker:
         with self._lock:
             return song_query in self._downloaded
 
+    def try_claim(self, song_query: str) -> bool:
+        with self._lock:
+            if song_query in self._downloaded or song_query in self._claimed:
+                return False
+            self._claimed.add(song_query)
+            return True
+
     def mark_downloaded(self, song_query: str):
         with self._lock:
+            self._claimed.discard(song_query)
             if song_query in self._downloaded:
                 return
             self._downloaded.add(song_query)
             self._save()
 
+    def release_claim(self, song_query: str) -> None:
+        with self._lock:
+            self._claimed.discard(song_query)
+
     def reset(self):
         """Clear all tracked downloads."""
         with self._lock:
             self._downloaded.clear()
+            self._claimed.clear()
             if os.path.exists(self.filepath):
                 os.remove(self.filepath)
         logger.info("Resume tracker reset.")

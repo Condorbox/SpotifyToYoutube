@@ -38,7 +38,11 @@ class YtDlpStrategy(Protocol):
 class DownloadTracker(Protocol):
     def is_downloaded(self, song_query: str) -> bool: ...
 
+    def try_claim(self, song_query: str) -> bool: ...
+
     def mark_downloaded(self, song_query: str) -> None: ...
+
+    def release_claim(self, song_query: str) -> None: ...
 
 
 class _NullProgress:
@@ -168,7 +172,6 @@ def convert_playlist(
 
     total = int(spotify_playlist.get("total") or 0)
 
-    existing_video_ids_lock = threading.Lock()
     youtube_lock = threading.Lock()
 
     def process_track(item: Any) -> _TrackOutcome:
@@ -190,18 +193,13 @@ def convert_playlist(
         skipped_not_found_local = 0
 
         if video_id:
-            should_add = False
-            with existing_video_ids_lock:
+            with youtube_lock:
                 if video_id in existing_video_ids:
                     skipped_existing_local = 1
                 else:
                     existing_video_ids.add(video_id)
-                    should_add = True
-
-            if should_add:
-                with youtube_lock:
                     youtube.add_song_to_playlist(video_id=video_id, playlist_id=youtube_playlist_id)
-                added = 1
+                    added = 1
         else:
             skipped_not_found_local = 1
 
@@ -211,13 +209,21 @@ def convert_playlist(
         if download_songs:
             assert tracker is not None
             assert download_strategy is not None
-            if tracker.is_downloaded(song_query):
+            if not tracker.try_claim(song_query):
                 skipped_already_downloaded_local = 1
             else:
-                output_path = download_strategy.execute(song=song_query, video_id=video_id, track_metadata=track_metadata)
+                try:
+                    output_path = download_strategy.execute(
+                        song=song_query, video_id=video_id, track_metadata=track_metadata
+                    )
+                except Exception:
+                    tracker.release_claim(song_query)
+                    raise
                 if output_path:
                     tracker.mark_downloaded(song_query)
                     downloaded_local = 1
+                else:
+                    tracker.release_claim(song_query)
 
         return _TrackOutcome(
             song_query=song_query,
