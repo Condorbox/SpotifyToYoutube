@@ -44,7 +44,7 @@ class DownloadStrategy(YTDLPStrategy):
             if not video_id:
                 return None
 
-            webm_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.webm"))
+            out_tpl = os.path.join(self._download_dir, sanitize_filename(song) + ".%(ext)s")
             mp3_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.mp3"))
 
             base, _ext = os.path.splitext(mp3_output_path)
@@ -52,12 +52,17 @@ class DownloadStrategy(YTDLPStrategy):
             cover_path = base + "_cover.jpg"
 
             video_url = f"https://www.youtube.com/watch?v={video_id}"
-
+            downloaded_path: str | None = None
             try:
-                if YTDLPHelper._run_yt_dlp(["-f", "bestaudio", "-o", webm_output_path, video_url]) is None:
-                    return None
+                result = YTDLPHelper._run_yt_dlp([
+                    "-f", "bestaudio",
+                    "-o", out_tpl,
+                    "--print", "after_move:filepath",
+                    video_url,
+                ])
+                downloaded_path = result.strip() if result else None
 
-                if not os.path.exists(webm_output_path):
+                if not downloaded_path or not os.path.exists(downloaded_path):
                     return None
 
                 cover_url = track_metadata.get("cover_url") if track_metadata else None
@@ -69,7 +74,7 @@ class DownloadStrategy(YTDLPStrategy):
                     except Exception:
                         logger.warning("Failed downloading cover art for %s", song, exc_info=True)
 
-                command = ["ffmpeg", "-y", "-i", webm_output_path]
+                command = ["ffmpeg", "-y", "-i", downloaded_path]
                 if cover_available:
                     command.extend(
                         [
@@ -104,13 +109,8 @@ class DownloadStrategy(YTDLPStrategy):
                 )
 
                 if track_metadata:
-                    metadata_fields = {
-                        "title": track_metadata.get("title", ""),
-                        "artist": track_metadata.get("artist", ""),
-                        "album": track_metadata.get("album", ""),
-                    }
-
-                    for key, value in metadata_fields.items():
+                    for key in ("title", "artist", "album"):
+                        value = track_metadata.get(key, "")
                         if value:
                             command.extend(["-metadata", f"{key}={value}"])
 
@@ -121,9 +121,9 @@ class DownloadStrategy(YTDLPStrategy):
                 return mp3_output_path
 
             finally:
-                # Remove original WebM file
-                if os.path.exists(webm_output_path):
-                    os.remove(webm_output_path)
+                # Remove original file
+                if downloaded_path and os.path.exists(downloaded_path):
+                    os.remove(downloaded_path)
                 if os.path.exists(temp_output_file):
                     os.remove(temp_output_file)
                 if os.path.exists(cover_path):
