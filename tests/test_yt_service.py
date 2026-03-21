@@ -257,6 +257,7 @@ def test_execute_raises_quota_exceeded_without_retry(monkeypatch):
 def test_execute_retries_on_500_then_succeeds(monkeypatch):
     sleep_calls: list[float] = []
     monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(youtube_service.random, "uniform", lambda a, b: 0)  # neutralise jitter
     service = YouTubeService(_settings(), youtube_client=object())
     request = _SequenceRequest([_http_error(status=500), {"ok": True}])
 
@@ -268,6 +269,7 @@ def test_execute_retries_on_500_then_succeeds(monkeypatch):
 def test_execute_retries_on_retryable_403_reason(monkeypatch):
     sleep_calls: list[float] = []
     monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(youtube_service.random, "uniform", lambda a, b: 0)  # neutralise jitter
     service = YouTubeService(_settings(), youtube_client=object())
     request = _SequenceRequest([_http_error(status=403, api_reason="userRateLimitExceeded"), {"ok": True}])
 
@@ -291,6 +293,7 @@ def test_execute_does_not_retry_non_retryable_403_reason(monkeypatch):
 def test_execute_raises_after_exhausting_retries(monkeypatch):
     sleep_calls: list[float] = []
     monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(youtube_service.random, "uniform", lambda a, b: 0)  # neutralise jitter
     service = YouTubeService(_settings(), youtube_client=object())
     request = _SequenceRequest([_http_error(status=500), _http_error(status=500), _http_error(status=500)])
 
@@ -298,3 +301,15 @@ def test_execute_raises_after_exhausting_retries(monkeypatch):
         service._execute(request, retries=3, backoff=2.0)
     assert request.execute_calls == 3
     assert sleep_calls == [2.0, 4.0]
+
+
+def test_execute_retry_sleep_includes_jitter(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(youtube_service.random, "uniform", lambda a, b: 0.5)  # fixed jitter
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([_http_error(status=500), {"ok": True}])
+
+    service._execute(request, retries=3, backoff=2.0)
+    # base_wait = 2.0 ** 1 = 2.0, jitter = 0.5 → total = 2.5
+    assert sleep_calls == [2.5]

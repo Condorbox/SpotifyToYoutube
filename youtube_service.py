@@ -1,4 +1,5 @@
 import logging
+import random
 import time
 from typing import Set, Any
 import google_auth_oauthlib.flow
@@ -44,6 +45,9 @@ class YouTubeService:
         - Lets other 4xx client errors propagate immediately as they are not
           retryable.
         """
+        if retries < 1:
+            raise ValueError("'retries' must at leats 1.")
+
         last_exc: Exception | None = None
 
         for attempt in range(1, retries + 1):
@@ -66,7 +70,10 @@ class YouTubeService:
 
                 is_retryable = status >= 500 or reason in RETRYABLE_403_REASONS
                 if is_retryable and attempt < retries:
-                    wait = backoff ** attempt
+                    # Exponential backoff with jitter
+                    base_wait = backoff ** attempt
+                    jitter = random.uniform(0, 1)  # Adds up to 1 second of randomness
+                    wait = base_wait + jitter
                     logger.warning(
                         "YouTube API error %s/%s (attempt %d/%d). Retrying in %.1fs…",
                         status, reason or "unknown", attempt, retries, wait,
