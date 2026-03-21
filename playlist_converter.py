@@ -4,7 +4,7 @@ import logging
 import threading
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol, Set, Iterable
+from typing import Any, Callable, Iterable, Optional, Protocol, Set
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +132,150 @@ class _TrackOutcome:
     skipped_not_found: int = 0
 
 
+@dataclass(slots=True)
+class _OutcomeTally:
+    processed: int = 0
+    added_to_youtube: int = 0
+    downloaded: int = 0
+    skipped_unavailable: int = 0
+    skipped_existing: int = 0
+    skipped_already_downloaded: int = 0
+    skipped_not_found: int = 0
+
+    def add(self, outcome: _TrackOutcome) -> None:
+        self.processed += 1
+        self.added_to_youtube += outcome.added_to_youtube
+        self.downloaded += outcome.downloaded
+        self.skipped_unavailable += outcome.skipped_unavailable
+        self.skipped_existing += outcome.skipped_existing
+        self.skipped_already_downloaded += outcome.skipped_already_downloaded
+        self.skipped_not_found += outcome.skipped_not_found
+
+    def to_result(self, *, playlist_name: str, youtube_playlist_id: str, total: int) -> ConvertResult:
+        return ConvertResult(
+            playlist_name=playlist_name,
+            youtube_playlist_id=youtube_playlist_id,
+            total=total,
+            processed=self.processed,
+            added_to_youtube=self.added_to_youtube,
+            downloaded=self.downloaded,
+            skipped_unavailable=self.skipped_unavailable,
+            skipped_existing=self.skipped_existing,
+            skipped_already_downloaded=self.skipped_already_downloaded,
+            skipped_not_found=self.skipped_not_found,
+        )
+
+
+@dataclass(slots=True)
+class _TrackProcessor:
+    youtube: YouTubeClient
+    youtube_playlist_id: str
+    existing_video_ids: set[str]
+    youtube_lock: threading.Lock
+    search_strategy: YtDlpStrategy
+    download_strategy: YtDlpStrategy | None
+    tracker: DownloadTracker | None
+    download_songs: bool
+    tracker_lock: threading.Lock | None
+
+    def __call__(self, item: Any) -> _TrackOutcome:
+        meta = self._parse_item(item)
+        if not meta:
+            return _TrackOutcome(song_query=None, skipped_unavailable=1)
+
+        track_metadata = {
+            "title": meta.title,
+            "album": meta.album,
+            "artist": meta.artist,
+            "cover_url": meta.cover_url,
+        }
+        song_query = meta.query
+        logger.debug("Processing: %s", song_query)
+
+        video_id = self.search_strategy.execute(song=song_query)
+
+        added_to_youtube, skipped_existing, skipped_not_found = self._maybe_add_to_youtube(video_id)
+        downloaded, skipped_already_downloaded = self._maybe_download(
+            song_query=song_query,
+            video_id=video_id,
+            track_metadata=track_metadata,
+        )
+
+        return _TrackOutcome(
+            song_query=song_query,
+            added_to_youtube=added_to_youtube,
+            downloaded=downloaded,
+            skipped_existing=skipped_existing,
+            skipped_already_downloaded=skipped_already_downloaded,
+            skipped_not_found=skipped_not_found,
+        )
+
+    @staticmethod
+    def _parse_item(item: Any) -> TrackMeta | None:
+        if not isinstance(item, dict):
+            return None
+        return parse_track(item.get("track"))
+
+    def _maybe_add_to_youtube(self, video_id: str | None) -> tuple[int, int, int]:
+        if not video_id:
+            return 0, 0, 1
+
+        with self.youtube_lock:
+            if video_id in self.existing_video_ids:
+                return 0, 1, 0
+            self.existing_video_ids.add(video_id)
+            self.youtube.add_song_to_playlist(video_id=video_id, playlist_id=self.youtube_playlist_id)
+            return 1, 0, 0
+
+    def _maybe_download(
+        self, *, song_query: str, video_id: str | None, track_metadata: dict[str, Any]
+    ) -> tuple[int, int]:
+        if not self.download_songs:
+            return 0, 0
+
+        if self.tracker is None or self.download_strategy is None:
+            raise ValueError("tracker and download_strategy must be provided when download_songs=True")
+
+        tracker_lock = self.tracker_lock
+        if tracker_lock is None:
+            claimed = self.tracker.try_claim(song_query)
+        else:
+            with tracker_lock:
+                claimed = self.tracker.try_claim(song_query)
+
+        if not claimed:
+            return 0, 1
+
+        try:
+            output_path = self.download_strategy.execute(
+                song=song_query,
+                video_id=video_id,
+                track_metadata=track_metadata,
+            )
+        except Exception:
+            if tracker_lock is None:
+                self.tracker.release_claim(song_query)
+            else:
+                with tracker_lock:
+                    self.tracker.release_claim(song_query)
+            raise
+
+        if output_path:
+            if tracker_lock is None:
+                self.tracker.mark_downloaded(song_query)
+            else:
+                with tracker_lock:
+                    self.tracker.mark_downloaded(song_query)
+            return 1, 0
+
+        if tracker_lock is None:
+            self.tracker.release_claim(song_query)
+        else:
+            with tracker_lock:
+                self.tracker.release_claim(song_query)
+        return 0, 0
+
+
 def _iter_playlist_items(spotify: SpotifyClient, first_page: dict[str, Any]) -> Iterable[Any]:
     page: dict[str, Any] = first_page
     while True:
@@ -143,6 +287,38 @@ def _iter_playlist_items(spotify: SpotifyClient, first_page: dict[str, Any]) -> 
         if not page.get("next"):
             break
         page = spotify.next(page)
+
+
+def _drain(done: set[Future[_TrackOutcome]], tally: _OutcomeTally, progress: Progress) -> None:
+    for future in done:
+        outcome = future.result()
+        tally.add(outcome)
+        if outcome.song_query:
+            progress.set_postfix_str(outcome.song_query[:50])
+        progress.update(1)
+
+
+def _process_items_concurrently(
+    *,
+    items: Iterable[Any],
+    processor: Callable[[Any], _TrackOutcome],
+    workers: int,
+    progress: Progress,
+    tally: _OutcomeTally,
+) -> None:
+    pending: set[Future[_TrackOutcome]] = set()
+    max_pending = max(1, workers * 2)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for item in items:
+            pending.add(executor.submit(processor, item))
+            if len(pending) >= max_pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                _drain(done, tally, progress)
+
+        while pending:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            _drain(done, tally, progress)
 
 
 def convert_playlist(
@@ -173,110 +349,31 @@ def convert_playlist(
     total = int(spotify_playlist.get("total") or 0)
 
     youtube_lock = threading.Lock()
+    tracker_lock = threading.Lock() if download_songs else None
 
-    def process_track(item: Any) -> _TrackOutcome:
-        if not isinstance(item, dict):
-            return _TrackOutcome(song_query=None, skipped_unavailable=1)
+    processor = _TrackProcessor(
+        youtube=youtube,
+        youtube_playlist_id=youtube_playlist_id,
+        existing_video_ids=existing_video_ids,
+        youtube_lock=youtube_lock,
+        search_strategy=search_strategy,
+        download_strategy=download_strategy,
+        tracker=tracker,
+        download_songs=download_songs,
+        tracker_lock=tracker_lock,
+    )
 
-        meta = parse_track(item.get("track"))
-        if not meta:
-            return _TrackOutcome(song_query=None, skipped_unavailable=1)
+    tally = _OutcomeTally()
+    _process_items_concurrently(
+        items=_iter_playlist_items(spotify, spotify_playlist),
+        processor=processor,
+        workers=workers,
+        progress=progress,
+        tally=tally,
+    )
 
-        track_metadata = {"title": meta.title, "album": meta.album, "artist": meta.artist, "cover_url": meta.cover_url}
-        song_query = meta.query
-        logger.debug("Processing: %s", song_query)
-
-        video_id = search_strategy.execute(song=song_query)
-
-        added = 0
-        skipped_existing_local = 0
-        skipped_not_found_local = 0
-
-        if video_id:
-            with youtube_lock:
-                if video_id in existing_video_ids:
-                    skipped_existing_local = 1
-                else:
-                    existing_video_ids.add(video_id)
-                    youtube.add_song_to_playlist(video_id=video_id, playlist_id=youtube_playlist_id)
-                    added = 1
-        else:
-            skipped_not_found_local = 1
-
-        downloaded_local = 0
-        skipped_already_downloaded_local = 0
-
-        if download_songs:
-            if tracker is None or download_strategy is None:
-                raise ValueError(
-                    "tracker and download_strategy must be provided when download_songs=True"
-                )
-
-            if not tracker.try_claim(song_query):
-                skipped_already_downloaded_local = 1
-            else:
-                try:
-                    output_path = download_strategy.execute(
-                        song=song_query, video_id=video_id, track_metadata=track_metadata
-                    )
-                except Exception:
-                    tracker.release_claim(song_query)
-                    raise
-                if output_path:
-                    tracker.mark_downloaded(song_query)
-                    downloaded_local = 1
-                else:
-                    tracker.release_claim(song_query)
-
-        return _TrackOutcome(
-            song_query=song_query,
-            added_to_youtube=added,
-            downloaded=downloaded_local,
-            skipped_existing=skipped_existing_local,
-            skipped_already_downloaded=skipped_already_downloaded_local,
-            skipped_not_found=skipped_not_found_local,
-        )
-
-    pending: set[Future[_TrackOutcome]] = set()
-    max_pending = max(1, workers * 2)
-    outcomes: list[_TrackOutcome] = []
-
-    def _drain(done_drain: set[Future[_TrackOutcome]], result_accumulator: list[_TrackOutcome], progress_drain: Progress) -> None:
-        for future in done_drain:
-            outcome = future.result()
-            result_accumulator.append(outcome)
-            if outcome.song_query:
-                progress_drain.set_postfix_str(outcome.song_query[:50])
-            progress_drain.update(1)
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        for item in _iter_playlist_items(spotify, spotify_playlist):
-            pending.add(executor.submit(process_track, item))
-            if len(pending) >= max_pending:
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                _drain(done, outcomes, progress)
-
-        while pending:
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
-            _drain(done, outcomes, progress)
-
-    processed = len(outcomes)
-    added_to_youtube = sum(outcome.added_to_youtube for outcome in outcomes)
-    downloaded = sum(outcome.downloaded for outcome in outcomes)
-    skipped_unavailable = sum(outcome.skipped_unavailable for outcome in outcomes)
-    skipped_existing = sum(outcome.skipped_existing for outcome in outcomes)
-    skipped_already_downloaded = sum(outcome.skipped_already_downloaded for outcome in outcomes)
-    skipped_not_found = sum(outcome.skipped_not_found for outcome in outcomes)
-
-    return ConvertResult(
+    return tally.to_result(
         playlist_name=playlist_name,
         youtube_playlist_id=youtube_playlist_id,
         total=total,
-        processed=processed,
-        added_to_youtube=added_to_youtube,
-        downloaded=downloaded,
-        skipped_unavailable=skipped_unavailable,
-        skipped_existing=skipped_existing,
-        skipped_already_downloaded=skipped_already_downloaded,
-        skipped_not_found=skipped_not_found,
     )
