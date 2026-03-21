@@ -78,6 +78,8 @@ if __name__ == '__main__':
         )
 
     logger.info(f"Download songs: {MESSAGE_COLOR}{download_songs}{RESET_COLOR}")
+    if settings.playlist_offset:
+        logger.info("Spotify playlist offset: %s%d%s", MESSAGE_COLOR, settings.playlist_offset, RESET_COLOR)
 
     # Initialize services
     yt_service = YouTubeService(settings)
@@ -91,7 +93,17 @@ if __name__ == '__main__':
     )
 
     # Count total tracks for the progress bar
-    total = spotify_playlist_for_convert.get("total", 0)
+    raw_total = spotify_playlist_for_convert.get("total", 0) or 0
+    raw_offset = spotify_playlist_for_convert.get("offset", 0) or 0
+    try:
+        total_value = int(raw_total)
+    except (TypeError, ValueError):
+        total_value = 0
+    try:
+        offset_value = int(raw_offset)
+    except (TypeError, ValueError):
+        offset_value = 0
+    total = max(0, max(0, total_value) - max(0, offset_value))
     desc = "Syncing playlist" if settings.mode == Mode.SYNC else "Converting playlist"
 
     with tqdm(total=total, desc=desc, unit="track") as progress:

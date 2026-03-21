@@ -346,7 +346,22 @@ def convert_playlist(
     )
     existing_video_ids = set() if created else youtube.get_existing_video_ids(playlist_id=youtube_playlist_id)
 
-    total = int(spotify_playlist.get("total") or 0)
+    raw_total = spotify_playlist.get("total") or 0
+    raw_offset = spotify_playlist.get("offset") or 0
+    try:
+        total_value = int(raw_total)
+    except (TypeError, ValueError):
+        total_value = 0
+    try:
+        offset_value = int(raw_offset)
+    except (TypeError, ValueError):
+        offset_value = 0
+
+    if total_value < 0:
+        total_value = 0
+    if offset_value < 0:
+        offset_value = 0
+    total = max(0, total_value - offset_value)
 
     youtube_lock = threading.Lock()
     tracker_lock = threading.Lock() if download_songs else None

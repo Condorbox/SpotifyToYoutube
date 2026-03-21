@@ -291,3 +291,42 @@ def test_convert_playlist_parallel_workers_prevent_duplicate_downloads():
     assert len(downloader.calls) == 1
     assert tracker.marked == ["Artist1 - Song1"]
     assert progress.updated == 2
+
+
+def test_convert_playlist_adjusts_total_when_offset_present():
+    page = {
+        "total": 10,
+        "offset": 7,
+        "next": None,
+        "items": [
+            _track_item(title="Song1", artist="Artist1"),
+            _track_item(title="Song2", artist="Artist2"),
+            _track_item(title="Song3", artist="Artist3"),
+        ],
+    }
+
+    spotify = FakeSpotify(pages=[page])
+    youtube = FakeYouTube(existing=set())
+    search = FakeSearchStrategy(
+        {
+            "Artist1 - Song1": "v1",
+            "Artist2 - Song2": "v2",
+            "Artist3 - Song3": "v3",
+        }
+    )
+    progress = FakeProgress()
+
+    result = convert_playlist(
+        spotify=spotify,
+        youtube=youtube,
+        spotify_playlist=page,
+        search_strategy=search,
+        download_strategy=None,
+        tracker=None,
+        download_songs=False,
+        progress=progress,
+    )
+
+    assert result.total == 3
+    assert result.processed == 3
+    assert progress.updated == 3
