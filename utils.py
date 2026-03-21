@@ -1,5 +1,7 @@
 import re
 
+RETRYABLE_403_REASONS = {"userRateLimitExceeded", "rateLimitExceeded"}
+
 def sanitize_filename(filename: str) -> str:
     """Sanitize a filename for safe use in the OS and ffmpeg"""
     sanitized = re.sub(r'[ #<>:"/\\|&?*;()$\[\]\'\n\t%]', '_', filename)

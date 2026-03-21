@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from types import SimpleNamespace
 from typing import Any
 
+import googleapiclient.errors
+import pytest
+
 from config import Mode, Settings
+import youtube_service
 from youtube_service import YouTubeService
+from youtube_service import YouTubeQuotaExceededError
 
 
 def _settings() -> Settings:
@@ -107,6 +114,47 @@ class _FakeYouTubeClient:
         return self._playlist_items
 
 
+@dataclass(slots=True)
+class _SequenceRequest:
+    outcomes: list[Any]
+    execute_calls: int = 0
+
+    def execute(self) -> Any:
+        self.execute_calls += 1
+        if not self.outcomes:
+            raise AssertionError("Request executed more times than expected")
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+def _http_error(*, status: int, api_reason: str | None = None) -> googleapiclient.errors.HttpError:
+    resp = SimpleNamespace(
+        status=status,
+        reason={
+            403: "Forbidden",
+            404: "Not Found",
+            500: "Internal Server Error",
+        }.get(status, "Error"),
+    )
+
+    if api_reason is None:
+        content = b"{}"
+    else:
+        content = json.dumps(
+            {
+                "error": {
+                    "errors": [{"reason": api_reason, "message": "boom"}],
+                    "code": status,
+                    "message": "boom",
+                }
+            }
+        ).encode("utf-8")
+
+    return googleapiclient.errors.HttpError(resp, content)
+
+
 
 def test_get_or_create_playlist_id_returns_existing_first_page():
     yt_client = _FakeYouTubeClient(
@@ -181,3 +229,72 @@ def test_get_existing_video_ids_paginates_and_collects_ids():
     assert service.get_existing_video_ids("pl123") == {"v1", "v2", "v3"}
     assert yt_client._playlist_items.list_calls == [{"part": "snippet", "playlistId": "pl123", "maxResults": 50}]
     assert yt_client._playlist_items.list_next_calls == 2
+
+
+def test_execute_returns_value_first_try(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([{"ok": True}])
+
+    assert service._execute(request) == {"ok": True}
+    assert request.execute_calls == 1
+    assert sleep_calls == []
+
+
+def test_execute_raises_quota_exceeded_without_retry(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([_http_error(status=403, api_reason="quotaExceeded")])
+
+    with pytest.raises(YouTubeQuotaExceededError):
+        service._execute(request, retries=5, backoff=2.0)
+    assert request.execute_calls == 1
+    assert sleep_calls == []
+
+
+def test_execute_retries_on_500_then_succeeds(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([_http_error(status=500), {"ok": True}])
+
+    assert service._execute(request, retries=3, backoff=2.0) == {"ok": True}
+    assert request.execute_calls == 2
+    assert sleep_calls == [2.0]
+
+
+def test_execute_retries_on_retryable_403_reason(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([_http_error(status=403, api_reason="userRateLimitExceeded"), {"ok": True}])
+
+    assert service._execute(request, retries=3, backoff=2.0) == {"ok": True}
+    assert request.execute_calls == 2
+    assert sleep_calls == [2.0]
+
+
+def test_execute_does_not_retry_non_retryable_403_reason(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([_http_error(status=403, api_reason="accessNotConfigured")])
+
+    with pytest.raises(googleapiclient.errors.HttpError):
+        service._execute(request, retries=3, backoff=2.0)
+    assert request.execute_calls == 1
+    assert sleep_calls == []
+
+
+def test_execute_raises_after_exhausting_retries(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(youtube_service.time, "sleep", sleep_calls.append)
+    service = YouTubeService(_settings(), youtube_client=object())
+    request = _SequenceRequest([_http_error(status=500), _http_error(status=500), _http_error(status=500)])
+
+    with pytest.raises(googleapiclient.errors.HttpError):
+        service._execute(request, retries=3, backoff=2.0)
+    assert request.execute_calls == 3
+    assert sleep_calls == [2.0, 4.0]
