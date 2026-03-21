@@ -46,8 +46,10 @@ class DownloadStrategy(YTDLPStrategy):
 
             webm_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.webm"))
             mp3_output_path = os.path.join(self._download_dir, sanitize_filename(f"{song}.mp3"))
-            temp_output_file = mp3_output_path.replace(".mp3", "_tmp.mp3")
-            cover_path = mp3_output_path.replace(".mp3", "_cover.jpg")
+
+            base, _ext = os.path.splitext(mp3_output_path)
+            temp_output_file = base + "_tmp.mp3"
+            cover_path = base + "_cover.jpg"
 
             video_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -127,8 +129,11 @@ class DownloadStrategy(YTDLPStrategy):
                 if os.path.exists(cover_path):
                     os.remove(cover_path)
 
+        except (FileNotFoundError, PermissionError, OSError) as exc:
+            logger.error("Filesystem error during download of %s: %s", song, exc)
+            return None
         except Exception:
-            logger.exception("Conversion failed for %s", song)
+            logger.exception("Unexpected conversion failure for %s", song)
             return None
     
 class YTDLPHelper:

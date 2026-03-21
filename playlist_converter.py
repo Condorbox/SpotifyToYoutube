@@ -207,8 +207,11 @@ def convert_playlist(
         skipped_already_downloaded_local = 0
 
         if download_songs:
-            assert tracker is not None
-            assert download_strategy is not None
+            if tracker is None or download_strategy is None:
+                raise ValueError(
+                    "tracker and download_strategy must be provided when download_songs=True"
+                )
+
             if not tracker.try_claim(song_query):
                 skipped_already_downloaded_local = 1
             else:
