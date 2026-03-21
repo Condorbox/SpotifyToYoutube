@@ -1,96 +1,120 @@
-# Spotify to YouTube Playlist Converter
+# Spotify → YouTube (and MP3) Playlist CLI
 
-This is a Python program that allows you to create a YouTube playlist from songs in a Spotify playlist and optionally download the songs in mp3 format.
+Lightweight Python CLI to:
 
-## Prerequisites
+1) mirror a Spotify playlist into a YouTube playlist, and  
+2) optionally download each track as a tagged MP3 (via `yt-dlp` + `ffmpeg`).
 
-Before running this program, make sure you have the following installed:
+> Note: due to recent Spotify API changes, this workflow typically requires a **Spotify Premium** account.
 
-- Python 3.x
-- [Spotipy](https://github.com/plamere/spotipy): A Python library for interacting with the Spotify API.
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp): A Python library for downloading YouTube videos and audio.
-- [Google APIs Client Library](https://developers.google.com/api-client-library/python/start/installation): For interacting with the YouTube API.
-- [colorama](https://pypi.org/project/colorama/): For formatting text in the console.
-- [FFmpeg](https://ffmpeg.org/): Used by yt-dlp to properly download and process audio. The program automatically converts downloaded songs to MP3 format and embeds useful metadata (such as artist, album, and title).
+## Features
 
-Also, make sure to set up your Spotify and YouTube API credentials before running the program. You can find more information in the configuration section below.
+- **Convert mode** (default): processes every playlist item.
+- **Sync mode**: only processes tracks added since your last run (snapshot-based).
+- **Concurrent workers**: `--workers N` runs track processing in a thread pool (faster on large playlists).
+- **Duplicate protection**: prevents adding the same YouTube video ID twice (even with many workers).
+- **Resumable downloads**: tracks downloaded items in a local JSON tracker so re-runs don’t re-download.
+- **Downloads with metadata**: MP3 conversion + ID3 tags + optional cover art embedding.
+- **Spotify offset**: start converting from a specific playlist index via `--playlist-offset` / `PLAYLIST_OFFSET`.
+- **Good CLI UX**: progress bar (tqdm), clear logs, optional log file.
 
-> **Warning**
-> Due to recent Spotify API changes, this project requires a **Spotify Premium** account for the Spotify side of the workflow.
+## Requirements
+
+- Python **3.10+**
+- A Spotify Developer app (client id/secret + redirect URI)
+- A Google OAuth client JSON for YouTube Data API v3
+- External tools on your `PATH`:
+  - `yt-dlp`
+  - `ffmpeg`
+
+## Install
+
+```bash
+pip install -r requirements.txt
+```
+
+For development/tests:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+> **Important**
+> `yt-dlp` and `ffmpeg` are **not installed via pip**.  
+> You must install them separately and ensure they are available on your system `PATH`.
 
 ## Configuration
 
-You can provide configuration via **CLI flags** or **environment variables** (including a `.env` file).
+You can configure everything via **CLI flags** or **environment variables**. A `.env` file is supported.
 
-1. Set up your Spotify and YouTube API credentials:
+### Minimal `.env` example
 
-   - Get a `client_id`, `client_secret`, and `redirect_uri` from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications).
-   - Download the JSON credentials file from the [Google Developer Console](https://console.developers.google.com/), which will be used for authentication with the YouTube API.
-   - Define the following environment variables on your system or create a `.env` file in the project's root directory:
+```dotenv
+CLIENT_ID=...
+CLIENT_SECRET=...
+REDIRECT_URI=http://localhost:8888/callback
+PLAYLIST_ID=...
+JSON_URL=/absolute/path/to/google-oauth-client.json
+```
 
-   ```plaintext
-   CLIENT_ID=<Your Spotify client_id>
-   CLIENT_SECRET=<Your Spotify client_secret>
-   REDIRECT_URI=<Your Spotify redirect_uri>
-   JSON_URL=<Path to your Google credentials JSON file>
-   PLAYLIST_ID=<The ID of the Spotify playlist you want to convert>
-   DOWNLOAD_DIR=<Path to the directory where downloaded audio files will be saved (required only when downloading)>
-   PLAYLIST_OFFSET=<Offset for Spotify playlist pagination (default: 0)>
-   TRACKER_FILE=<Path to the download tracker JSON file (optional, defaults to ./downloaded_songs.json)>
-   SNAPSHOT_FILE=<Path to the playlist snapshot JSON file (optional, defaults to ./playlist_snapshot.json)>
-   WORKERS=<Number of concurrent track workers (default: 1)>
-   ```
+Optional:
 
-2. Install program dependencies:
+```dotenv
+DOWNLOAD_DIR=./downloads
+PLAYLIST_OFFSET=0
+WORKERS=4
+TRACKER_FILE=./downloaded_songs.json
+SNAPSHOT_FILE=./playlist_snapshot.json
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+### CLI flags (summary)
 
-   **Note**: `yt-dlp` and `ffmpeg` must be installed separately and available on your `PATH`.
+- Spotify: `--client-id`, `--client-secret`, `--redirect-uri`, `--playlist-id`
+- YouTube: `--json-url`
+- Downloads: `--download` / `--no-download`, `--download-dir`, `--tracker-file`
+- Sync: `sync` subcommand or `--sync`, `--snapshot-file`
+- Performance: `--workers`
+- Debugging: `--log-level`, `--log-file`
+- Pagination: `--playlist-offset`
+
+Run `python main.py --help` for the full help output.
 
 ## Usage
 
-Run the program from the command line:
+### Convert (full conversion)
 
-```bash
-python main.py --help
-```
-
-Common CLI options:
-
-- Spotify: `--client-id`, `--client-secret`, `--redirect-uri`, `--playlist-id` (or `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `PLAYLIST_ID`)
-- YouTube: `--json-url` (or `JSON_URL`)
-- Downloading: `--download` / `--no-download`, `--download-dir` (or `DOWNLOAD_DIR`), `--tracker-file` (or `TRACKER_FILE`)
-- Sync: `sync` subcommand or `--sync`, `--snapshot-file` (or `SNAPSHOT_FILE`)
-- Other: `--playlist-offset`, `--workers`, `--log-level`, `--log-file`
-
-By default, the program will prompt you whether to download songs. You can skip the prompt with:
-
-- `--download` (download without prompting; requires `--download-dir` or `DOWNLOAD_DIR`)
-- `--no-download` (skip downloads without prompting)
-
-Example: convert playlist only (no downloads):
+Convert the playlist to YouTube (no downloads):
 
 ```bash
 python main.py --no-download
 ```
 
-Example: convert playlist + download audio:
+Convert + download MP3s (non-interactive):
 
 ```bash
 python main.py --download --download-dir ./downloads
 ```
 
-Example: run with 4 parallel workers:
+Run with 4 workers (thread pool):
 
 ```bash
 python main.py --workers 4 --no-download
 ```
 
-### Sync mode (incremental updates)
+Start converting from a Spotify pagination offset:
 
-Use sync mode to only process tracks added to the Spotify playlist since the last run. After a successful run, the tool stores a snapshot of Spotify track IDs in `playlist_snapshot.json` (configurable via `--snapshot-file` / `SNAPSHOT_FILE`).
+```bash
+python main.py --playlist-offset 200 --no-download
+```
+
+`PLAYLIST_OFFSET` is a **0-based** Spotify API offset (offset 200 starts at the 201st playlist item).  
+The progress bar and `ConvertResult.total` reflect the **remaining** items (`total - offset`).
+
+### Sync (incremental updates)
+
+Sync mode only processes tracks that were added since your last sync run. It stores a snapshot of Spotify
+track identifiers in `playlist_snapshot.json` (configurable via `--snapshot-file` / `SNAPSHOT_FILE`).
 
 First sync run (no snapshot yet) behaves like a full conversion, then future runs only process additions:
 
@@ -104,33 +128,25 @@ Alias flag (equivalent to the `sync` subcommand):
 python main.py --sync --no-download
 ```
 
-Note: removals are detected and logged, but the tool currently does not remove videos from the YouTube playlist.
+Removals are detected and logged, but the tool currently does not remove videos from the YouTube playlist.
 
-The program performs the following steps:
-1. Authenticates with the Spotify and YouTube APIs.
-2. Retrieves the playlist name and description from Spotify.
-3. Creates or retrieves a corresponding YouTube playlist.
-4. Searches for each song from the Spotify playlist on YouTube.
-5. Adds the found videos to the YouTube playlist.
-6. Optionally downloads the songs as audio files.
-7. Change the video format to mp3 and add metadata.
+## Output files
 
-## Features
-+ **Spotify to YouTube Playlist Conversion**: Converts a Spotify playlist into a YouTube playlist.
-+ **Incremental Sync Mode**: Processes only tracks added since the last run (stores a playlist snapshot on disk).
-+ **YouTube Playlist Management**: Creates a new YouTube playlist if it doesn't exist or update if it exist.
-+ **Duplicate Video Prevention**: Ensures that a song is not added to the YouTube playlist more than once.
-+ **Song Downloading with Metadata**: Downloads songs in mp3 format and automatically embeds artist, album, and title metadata using yt-dlp and FFmpeg.
+- `downloaded_songs.json`: download tracker used to skip already-downloaded tracks on re-runs
+  (path configurable via `--tracker-file` / `TRACKER_FILE`).
+- `playlist_snapshot.json`: sync snapshot of Spotify track identifiers
+  (path configurable via `--snapshot-file` / `SNAPSHOT_FILE`).
+- `DOWNLOAD_DIR`: where MP3 files are written when downloads are enabled.
 
-## Development
+## Troubleshooting
 
-Run the test suite:
-
-```bash
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pytest
-```
+- **YouTube quota exceeded**: the YouTube Data API has daily quotas. If you hit the limit, you’ll need to wait
+  for quota reset and re-run.
+- **OAuth redirect issues**: ensure your `REDIRECT_URI` matches the value configured in the Spotify Developer dashboard.
+- **`yt-dlp` / `ffmpeg` not found**: install them and ensure they’re available on your `PATH`.
+- **Matching accuracy**: YouTube matching uses `yt-dlp` search (`ytsearch1:`). Results may vary; retrying with fewer workers
+  and `--log-level DEBUG` can help diagnose unexpected matches.
 
 ## License
+
 This project is licensed under the MIT License. See the [LICENSE](https://github.com/Condorbox/SpotifyToYoutube/blob/main/LICENSE) file for more details.
