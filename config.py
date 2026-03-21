@@ -5,14 +5,22 @@ from colorama import Fore, Style
 import logging
 from dotenv import load_dotenv
 from dataclasses import dataclass
+from pathlib import Path
+from platformdirs import user_config_dir
+
 
 RESET_COLOR = Style.RESET_ALL
 WARNING_COLOR = Fore.YELLOW
 ERROR_COLOR = Fore.RED
 MESSAGE_COLOR = Fore.BLUE
 
-TRACKER_FILE = "downloaded_songs.json"
-SNAPSHOT_FILE = "playlist_snapshot.json"
+APP_NAME = "spotify-to-youtube"
+_CONFIG_DIR = Path(user_config_dir(APP_NAME))
+_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+TRACKER_FILE = str(_CONFIG_DIR / "downloaded_songs.json")
+SNAPSHOT_FILE = str(_CONFIG_DIR / "playlist_snapshot.json")
 
 load_dotenv()
 
